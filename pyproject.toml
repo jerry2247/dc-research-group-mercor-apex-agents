@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# =============================================================================
+#  Package metadata
+# =============================================================================
+[project]
+name = "apex-agents-bench"
+version = "0.1.0"
+description = "Reproducible runner and tooling around the Mercor APEX-Agents benchmark and Archipelago harness."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "Jerry Gu" },
+]
+keywords = ["llm", "agent", "benchmark", "apex", "apex-agents", "archipelago", "evaluation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# --- Runtime dependencies ----------------------------------------------------
+# The wrapper is intentionally light. The vendored Archipelago `agents/` and
+# `grading/` packages have collision-prone `runner` modules and large
+# transitive dep trees (langchain, deepagents, firecrawl, modal, etc.), so we
+# install each in its OWN uv-managed venv inside the vendor subdir, matching
+# Mercor's published example. Our wrapper subprocess-invokes those via
+# `uv run` (see src/apex_agents_bench/runner.py).
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "pydantic>=2.0.0",
+    "python-dotenv",
+    "httpx>=0.27.0",
+    "huggingface_hub>=0.24",
+    "pyyaml>=6.0",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=4.1",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "types-pyyaml",
+]
+
+[project.scripts]
+apex-agents-bench = "apex_agents_bench.cli:app"
+
+# =============================================================================
+#  Setuptools
+# =============================================================================
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["apex_agents_bench*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+apex_agents_bench = ["py.typed"]
+
+# =============================================================================
+#  Ruff (lint + format)
+# =============================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["vendor/"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line-too-long -- formatter handles it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+"src/apex_agents_bench/__main__.py" = ["E402"]
+# Typer/Click require typer.Option() in argument defaults; the pattern
+# is what makes --help work. B008 fires on it unavoidably.
+"src/apex_agents_bench/cli.py" = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# =============================================================================
+#  Mypy
+# =============================================================================
+[tool.mypy]
+python_version = "3.13"
+strict = false
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+exclude = ["vendor/", "build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = ["huggingface_hub.*"]
+ignore_missing_imports = true
+
+# =============================================================================
+#  Pytest
+# =============================================================================
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::DeprecationWarning:litellm.*",
+    "ignore::DeprecationWarning:huggingface_hub.*",
+]
+markers = [
+    "docker: integration test requiring a live Docker daemon (skipped by default)",
+    "network: test requires HF / OpenAI / xAI network access (skipped by default)",
+]
