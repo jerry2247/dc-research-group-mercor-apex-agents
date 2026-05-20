@@ -8,7 +8,38 @@ strings without an allow-list check, so the test-model surface
 
 ## Active patches
 
-_(none)_
+### Patch 001 — `environment/Dockerfile` adds gcc compile step for `sandbox_fs.so`
+
+**File**: `vendor/archipelago/environment/Dockerfile`
+**Status**: active
+**Rationale**: At the pinned vendor commit (3f4a8234), the production
+`environment/Dockerfile` ships `sandbox_fs.c` (the LD_PRELOAD library used
+by `code_execution_server`) but does not compile it. The server's
+`verify_sandbox_available()` then raises `RuntimeError` at startup, no
+tools are published, and the MCP gateway's `/apps` readiness check times
+out after 300s with a 503. The vendor's own `mcp_servers/code/Dockerfile.gvisor-test`
+contains the missing build step — we transplant it into the production
+Dockerfile.
+
+**Diff** (one inserted block, immediately after the `pdfs` install):
+
+```dockerfile
+# vendored-patch: compile sandbox_fs.so for the code_execution_server.
+RUN mkdir -p /app/lib && gcc -shared -fPIC -O2 \
+    -o /app/lib/sandbox_fs.so \
+    /app/mcp_servers/code/mcp_servers/code_execution_server/sandbox_fs.c \
+    -ldl -lpthread
+```
+
+**Resync note**: When bumping the upstream pin, check whether
+`environment/Dockerfile` upstream has gained a sandbox_fs.so build step. If
+yes, drop this patch and move it to "Retired patches" with the upstream
+commit that fixed it. If no, keep this patch and verify the file path
+`/app/mcp_servers/code/mcp_servers/code_execution_server/sandbox_fs.c`
+still exists in the new vendor source.
+
+**Regression test**: TBD — a fidelity test should assert the
+`# vendored-patch: compile sandbox_fs.so` marker is present in the Dockerfile.
 
 ## Why no patch is needed for `gpt-5.5` / `grok-4.3`
 

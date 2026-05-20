@@ -54,6 +54,18 @@ RUN cd /app/mcp_servers/code/mcp_servers/code_execution_server && export INSTALL
 # Install: pdfs
 RUN cd /app/mcp_servers/pdfs/mcp_servers/pdf_server && uv sync --all-extras
 
+# vendored-patch: compile sandbox_fs.so for the code_execution_server.
+# At the pinned vendor commit, this production Dockerfile is missing the
+# build step shown in mcp_servers/code/Dockerfile.gvisor-test. Without
+# /app/lib/sandbox_fs.so, the server's verify_sandbox_available() raises
+# RuntimeError at startup and never publishes its tool, so the MCP gateway
+# readiness check fails and /apps returns 503 after 300s. Build tools
+# (gcc + libc dev headers) are already in build-essential above.
+RUN mkdir -p /app/lib && gcc -shared -fPIC -O2 \
+    -o /app/lib/sandbox_fs.so \
+    /app/mcp_servers/code/mcp_servers/code_execution_server/sandbox_fs.c \
+    -ldl -lpthread
+
 ENV PATH=/app/.venv/bin:$PATH UV_SYSTEM_PYTHON=1
 
 # Runtime environment variables

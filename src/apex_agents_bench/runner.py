@@ -481,6 +481,22 @@ def _configure_mcp(base_url: str, mcp_config_path: Path) -> None:
             "9-server set; do not subset."
         )
     r = httpx.post(f"{base_url}/apps", json=mcp_config, timeout=600.0)
+    if not r.is_success:
+        # The vendor's /apps endpoint returns a JSON body on failure that names
+        # which MCP server(s) failed readiness and why (see
+        # vendor/archipelago/environment/runner/gateway/router.py). The default
+        # raise_for_status() throws that detail away. Capture and log it before
+        # re-raising so a 503 becomes diagnosable.
+        body_preview: str
+        try:
+            body_preview = json.dumps(r.json(), ensure_ascii=False, indent=2)
+        except Exception:
+            body_preview = r.text[:4000]
+        log.error(
+            "POST /apps failed: status=%d body=%s",
+            r.status_code,
+            body_preview,
+        )
     r.raise_for_status()
 
 
@@ -517,7 +533,12 @@ def _run_agent_subprocess(
         str(trajectory_out),
     ]
     log.info("invoking agent: cwd=%s cmd=%s", archipelago_agents_dir(), " ".join(cmd))
-    r = subprocess.run(cmd, cwd=str(archipelago_agents_dir()), check=False)
+    r = subprocess.run(
+        cmd,
+        cwd=str(archipelago_agents_dir()),
+        check=False,
+        env=_uv_subprocess_env(),
+    )
     return r.returncode
 
 
@@ -563,8 +584,32 @@ def _run_grading_subprocess(
         str(grades_out),
     ]
     log.info("invoking grader: cwd=%s cmd=%s", archipelago_grading_dir(), " ".join(cmd))
-    r = subprocess.run(cmd, cwd=str(archipelago_grading_dir()), check=False)
+    r = subprocess.run(
+        cmd,
+        cwd=str(archipelago_grading_dir()),
+        check=False,
+        env=_uv_subprocess_env(),
+    )
     return r.returncode
+
+
+def _uv_subprocess_env() -> dict[str, str]:
+    """Environment for any subprocess invoked via ``uv run``.
+
+    The vendored ``grading/uv.lock`` at the pinned commit declares
+    ``litellm == 1.83.0`` but references the ``litellm-1.81.15-py3-none-any.whl``
+    wheel. uv refuses to parse a lockfile with that mismatch by default,
+    erroring out before any vendor code can run. Setting
+    ``UV_SKIP_WHEEL_FILENAME_CHECK=1`` (the exact env var uv's error
+    message recommends) tells uv to trust the lockfile anyway and proceed.
+
+    We apply this to both the agent and grading subprocess wrappers as
+    defense-in-depth: only the grading lockfile is currently affected, but
+    a future vendor bump could introduce the same inconsistency on the
+    agent side. Scoped to subprocess.run env=; does not pollute the
+    user's shell.
+    """
+    return {**os.environ, "UV_SKIP_WHEEL_FILENAME_CHECK": "1"}
 
 
 # -----------------------------------------------------------------------------
