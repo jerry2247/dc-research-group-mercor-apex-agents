@@ -64,6 +64,7 @@ from apex_agents_bench.judge import (
     write_verifiers,
 )
 from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
+from apex_agents_bench.trace.config import TraceConfig
 from apex_agents_bench.paths import (
     archipelago_agents_dir,
     archipelago_environment_dir,
@@ -155,6 +156,13 @@ class RunOptions:
     is byte-identical to the no-ledger shape. See
     ``docs/DYNAMIC_LEDGER_PRD.md``."""
 
+    trace: TraceConfig = field(default_factory=TraceConfig)
+    """TRACE (uses-GT) configuration. Mutually exclusive with the
+    Dynamic Ledger — at most one of ``dynamic_ledger.enabled`` and
+    ``trace.enabled`` may be True. When ``trace.enabled=True`` the
+    runner threads the boolean ``criteria_passed == criteria_total``
+    into the reflector and curator. See ``docs/TRACE_PRD.md``."""
+
 
 @dataclass(frozen=True)
 class TaskOutcome:
@@ -240,6 +248,45 @@ def csv_headers_with_dynamic_ledger() -> list[str]:
     ``test_dynamic_ledger_on_csv_extends_baseline_at_end``.
     """
     return list(CSV_HEADERS) + list(_DYNAMIC_LEDGER_CSV_COLUMNS)
+
+
+_TRACE_CSV_COLUMNS: tuple[str, ...] = (
+    "trace_enabled",
+    "trace_snapshot_index_before",
+    "retrieved_bullet_count",
+    "retrieved_bullet_ids",
+    "citations_present",
+    "citations_count",
+    "citations_malformed_count",
+    "gt_correct_bit",
+    "reflector_proposal_count",
+    "curator_create_count",
+    "curator_create_blocked_count",
+    "curator_update_count",
+    "curator_delete_count",
+    "curator_consolidate_count",
+    "curator_no_op",
+    "trace_active_bullet_count_after",
+    "trace_total_bullet_count_after",
+    "trace_total_active_chars_after",
+    "reflector_prompt_tokens",
+    "reflector_completion_tokens",
+    "reflector_wall_seconds",
+    "curator_prompt_tokens",
+    "curator_completion_tokens",
+    "curator_wall_seconds",
+    "trajectory_chars_seen_by_curator",
+)
+
+
+def csv_headers_with_trace() -> list[str]:
+    """Return the CSV header list with the TRACE columns appended.
+
+    Mutually exclusive with the Dynamic Ledger columns: at most one of
+    ``--dynamic-ledger`` and ``--trace`` may be on per run. Baseline
+    header order is preserved as a prefix.
+    """
+    return list(CSV_HEADERS) + list(_TRACE_CSV_COLUMNS)
 
 
 # -----------------------------------------------------------------------------
@@ -670,6 +717,7 @@ def run_single_task(
     output_dir: Path,
     hf_token: str | None = None,
     dynamic_ledger_runtime: Any | None = None,  # DynamicLedgerRuntime | None
+    trace_runtime: Any | None = None,           # TraceRuntime | None
 ) -> tuple[TaskOutcome, dict | None]:
     """Run ONE task end-to-end. Returns ``(outcome, dynamic_ledger_csv_fragment)``.
 
@@ -769,6 +817,41 @@ def run_single_task(
                         exc,
                     )
 
+        # --- TRACE Hook A: retrieve + augment initial_messages.json --------
+        trace_csv: dict[str, Any] = {}
+        retrieved_bullets: list[Any] = []
+        trace_snapshot_index_before = 0
+        if trace_runtime is not None:
+            from apex_agents_bench.trace import augment_initial_messages as trace_inject
+            from apex_agents_bench.trace import retrieve as trace_retrieve
+            from apex_agents_bench.trace.runtime import trace_csv_fragment_empty
+
+            trace_csv = trace_csv_fragment_empty()
+            tstore = trace_runtime.store_for(task.domain)
+            trace_snapshot_index_before = trace_runtime.next_ordinal.get(task.domain, 0)
+            trace_csv["trace_snapshot_index_before"] = trace_snapshot_index_before
+            try:
+                q_emb = trace_runtime.embed.embed([task.prompt])[0]
+                retrieved_bullets = trace_retrieve(
+                    tstore, query_embedding=q_emb, k=trace_runtime.cfg.top_k_per_axis
+                )
+            except Exception as exc:
+                log.warning(
+                    "trace: retrieval failed for task=%s domain=%s (%s); proceeding without retrieval",
+                    task.task_id, task.domain, exc,
+                )
+                retrieved_bullets = []
+            trace_csv["retrieved_bullet_count"] = len(retrieved_bullets)
+            trace_csv["retrieved_bullet_ids"] = json.dumps([b.bullet_id for b in retrieved_bullets])
+            if retrieved_bullets:
+                try:
+                    trace_inject(initial_messages_path, bullets=retrieved_bullets)
+                except Exception as exc:
+                    log.warning(
+                        "trace: injecting cheatsheet into initial_messages failed (%s); leaving file unchanged",
+                        exc,
+                    )
+
         # --- Build the agent-config file (locked policy) -------------------
         agent_config = {
             "agent_config_id": AGENT_CONFIG_ID,
@@ -814,10 +897,34 @@ def run_single_task(
             traj.time_elapsed_seconds,
         )
 
-        # Grading always reads the original trajectory.json. The Dynamic
-        # Ledger no longer rewrites the agent's response — there are no
-        # citations to strip and no shadow trajectory.
+        # Grading reads the original trajectory.json by default. The
+        # Dynamic Ledger does not rewrite the response. TRACE strips a
+        # `<citations>` tag from `final_answer.reasoning` into a shadow
+        # ``trajectory_graded.json`` so the citation tag does not affect
+        # grading.
         trajectory_for_grading = trajectory_path
+        cited_bullet_ids: list[str] = []
+        if trace_runtime is not None:
+            from apex_agents_bench.trace import (
+                extract_and_strip_citations_from_trajectory,
+                write_shadow_trajectory,
+            )
+
+            try:
+                extract, shadow = extract_and_strip_citations_from_trajectory(trajectory_path)
+                trace_csv["citations_present"] = extract.citations_present
+                trace_csv["citations_count"] = len(extract.cited_bullet_ids)
+                trace_csv["citations_malformed_count"] = extract.citations_malformed_count
+                cited_bullet_ids = list(extract.cited_bullet_ids)
+                if shadow is not None:
+                    shadow_path = output_dir / "trajectory_graded.json"
+                    write_shadow_trajectory(shadow, out_path=shadow_path)
+                    trajectory_for_grading = shadow_path
+            except Exception as exc:
+                log.warning(
+                    "trace: citations strip / shadow write failed (%s); grading reads the original trajectory",
+                    exc,
+                )
 
         # --- Stream the final snapshot out ---------------------------------
         final_tar_gz = output_dir / "final_snapshot.tar.gz"
@@ -985,7 +1092,117 @@ def run_single_task(
             dynamic_ledger_csv["dynamic_ledger_total_entry_count_after"] = len(store.entries)
             dynamic_ledger_csv["dynamic_ledger_total_active_chars_after"] = sum(len(e.content) for e in active)
 
-        return outcome, (dynamic_ledger_csv if dynamic_ledger_runtime is not None else None)
+        # --- TRACE Hook C: bump counters, reflect, curate, apply, persist --
+        # Threads the boolean ``gt_correct`` (criteria_passed ==
+        # criteria_total) into both the reflector and the curator —
+        # intentionally, per the TRACE paper.
+        if trace_runtime is not None:
+            from apex_agents_bench.trace import (
+                apply_ops as trace_apply_ops,
+                curate as trace_curate,
+                reflect as trace_reflect,
+                render_trajectory_for_curator as trace_render_traj,
+            )
+
+            tstore = trace_runtime.store_for(task.domain)
+            gt_correct = (
+                grading_summary.criteria_total > 0
+                and grading_summary.criteria_passed == grading_summary.criteria_total
+            )
+            trace_csv["gt_correct_bit"] = gt_correct
+            # Bump usage / helpful / harmful counters on cited bullets
+            trace_runtime.record_citations(
+                task.domain, cited=cited_bullet_ids, gt_correct=gt_correct
+            )
+            ordinal = trace_runtime.current_ordinal_for(task.domain)
+            try:
+                traj_json = json.loads(trajectory_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                log.warning("trace: re-reading trajectory.json failed (%s)", exc)
+                traj_json = {}
+            rendered = trace_render_traj(
+                traj_json,
+                max_chars_per_tool_result=trace_runtime.cfg.trajectory_max_chars_per_tool_result,
+            )
+            trace_csv["trajectory_chars_seen_by_curator"] = len(rendered)
+            try:
+                refl = trace_reflect(
+                    tstore,
+                    task.prompt,
+                    rendered,
+                    cited_bullet_ids,
+                    gt_correct,
+                    cfg=trace_runtime.cfg,
+                )
+                trace_csv["reflector_proposal_count"] = len(refl.proposals)
+                trace_csv["reflector_prompt_tokens"] = refl.prompt_tokens
+                trace_csv["reflector_completion_tokens"] = refl.completion_tokens
+                trace_csv["reflector_wall_seconds"] = refl.wall_seconds
+
+                cur = trace_curate(
+                    tstore,
+                    task.prompt,
+                    rendered,
+                    cited_bullet_ids,
+                    gt_correct,
+                    refl.proposals,
+                    cfg=trace_runtime.cfg,
+                )
+                stats = trace_apply_ops(
+                    store=tstore,
+                    ops=cur.ops,
+                    retrieved=retrieved_bullets,
+                    embed=trace_runtime.embed,
+                    cfg=trace_runtime.cfg,
+                    current_ordinal=ordinal,
+                )
+                trace_runtime.persist(task.domain)
+                trace_runtime.snapshot_stores[task.domain].append_curator_log(
+                    {
+                        "task_id": task.task_id,
+                        "ordinal": ordinal,
+                        "gt_correct": gt_correct,
+                        "reflector_proposals": len(refl.proposals),
+                        "create": stats.create_committed,
+                        "create_blocked": stats.create_blocked,
+                        "update": stats.update,
+                        "delete": stats.delete,
+                        "consolidate": stats.consolidate,
+                        "no_op": stats.no_op,
+                        "reflector_parse_error": refl.parse_error,
+                        "curator_parse_error": cur.parse_error,
+                        "reflector_prompt_tokens": refl.prompt_tokens,
+                        "reflector_completion_tokens": refl.completion_tokens,
+                        "reflector_wall_seconds": refl.wall_seconds,
+                        "curator_prompt_tokens": cur.prompt_tokens,
+                        "curator_completion_tokens": cur.completion_tokens,
+                        "curator_wall_seconds": cur.wall_seconds,
+                    }
+                )
+                trace_csv["curator_create_count"] = stats.create_committed
+                trace_csv["curator_create_blocked_count"] = stats.create_blocked
+                trace_csv["curator_update_count"] = stats.update
+                trace_csv["curator_delete_count"] = stats.delete
+                trace_csv["curator_consolidate_count"] = stats.consolidate
+                trace_csv["curator_no_op"] = stats.no_op
+                trace_csv["curator_prompt_tokens"] = cur.prompt_tokens
+                trace_csv["curator_completion_tokens"] = cur.completion_tokens
+                trace_csv["curator_wall_seconds"] = cur.wall_seconds
+            except Exception as exc:
+                log.warning(
+                    "trace: reflector/curator failed for task=%s domain=%s (%s); leaving ledger unchanged",
+                    task.task_id, task.domain, exc,
+                )
+            active = tstore.active_bullets()
+            trace_csv["trace_active_bullet_count_after"] = len(active)
+            trace_csv["trace_total_bullet_count_after"] = len(tstore.bullets)
+            trace_csv["trace_total_active_chars_after"] = sum(len(b.content) for b in active)
+
+        if dynamic_ledger_runtime is not None:
+            return outcome, dynamic_ledger_csv
+        if trace_runtime is not None:
+            return outcome, trace_csv
+        return outcome, None
 
     finally:
         stop_env(env_container)
@@ -1116,6 +1333,53 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             run_dir / "dynamic_ledger",
         )
 
+    # --- TRACE: build per-run runtime (when enabled) -------------------------
+    trace_runtime: Any | None = None
+    if opts.trace.enabled:
+        if opts.dynamic_ledger.enabled:
+            raise ValueError(
+                "--trace and --dynamic-ledger are mutually exclusive. "
+                "Pick one memory subsystem per run."
+            )
+        from apex_agents_bench.trace.runtime import TraceRuntime
+
+        run_dir = opts.output_csv.parent
+        completed_per_domain_trace: dict[str, int] = {}
+        if opts.output_csv.is_file():
+            try:
+                with opts.output_csv.open("r", encoding="utf-8") as fh:
+                    rdr = csv.DictReader(fh)
+                    for r in rdr:
+                        d = r.get("domain", "")
+                        if r.get("status") == "completed" and d:
+                            completed_per_domain_trace[d] = (
+                                completed_per_domain_trace.get(d, 0) + 1
+                            )
+            except Exception:
+                completed_per_domain_trace = {}
+
+        # Reflector + curator both run on the agent profile's model.
+        cfg_trace_in = opts.trace
+        if cfg_trace_in.reflector_model is None or cfg_trace_in.curator_model is None:
+            cfg_trace_in = dataclasses.replace(
+                cfg_trace_in,
+                reflector_model=cfg_trace_in.reflector_model or opts.profile.orchestrator_model,
+                curator_model=cfg_trace_in.curator_model or opts.profile.orchestrator_model,
+                model_extra_args=dict(opts.profile.orchestrator_extra_args or {}),
+            )
+
+        trace_runtime = TraceRuntime.create(
+            cfg=cfg_trace_in,
+            run_dir=run_dir,
+            completed_per_domain=completed_per_domain_trace,
+        )
+        log.info(
+            "trace: enabled (embedding=%s top_k=%d snapshot_root=%s)",
+            opts.trace.embedding_model,
+            opts.trace.top_k_per_axis,
+            run_dir / "trace",
+        )
+
     write_manifest(
         opts.output_csv,
         build_run_manifest(opts, selected, pending, status="starting"),
@@ -1155,13 +1419,14 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             opts.profile.name,
         )
         try:
-            outcome, dynamic_ledger_csv_fragment = run_single_task(
+            outcome, memory_csv_fragment = run_single_task(
                 settings=opts.settings,
                 profile=opts.profile,
                 task=task,
                 output_dir=per_task_dir,
                 hf_token=hf_token,
                 dynamic_ledger_runtime=dynamic_ledger_runtime,
+                trace_runtime=trace_runtime,
             )
         except KeyboardInterrupt:
             log.warning("interrupted; %d tasks completed before stop", saved)
@@ -1235,13 +1500,15 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             "trajectory_path": str(per_task_dir / "trajectory.json"),
             "grades_path": str(per_task_dir / "grades.json"),
         }
-        if dynamic_ledger_csv_fragment is not None:
-            row.update(dynamic_ledger_csv_fragment)
-        append_row(
-            opts.output_csv,
-            row,
-            headers=csv_headers_with_dynamic_ledger() if opts.dynamic_ledger.enabled else None,
-        )
+        if memory_csv_fragment is not None:
+            row.update(memory_csv_fragment)
+        if opts.dynamic_ledger.enabled:
+            headers = csv_headers_with_dynamic_ledger()
+        elif opts.trace.enabled:
+            headers = csv_headers_with_trace()
+        else:
+            headers = None
+        append_row(opts.output_csv, row, headers=headers)
         saved += 1
         log.info(
             "[%d/%d] task_id=%s score=%.3f (%d/%d criteria)",

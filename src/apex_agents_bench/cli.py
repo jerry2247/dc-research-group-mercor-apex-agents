@@ -568,6 +568,27 @@ def run(
         "Retrieval is dual-axis: top-k by content-embedding plus top-k "
         "by source-problem embedding, then deduped by entry_id.",
     ),
+    trace: bool = typer.Option(
+        False,
+        "--trace/--no-trace",
+        help="Enable the TRACE (uses-ground-truth) subsystem. "
+        "Default: off. Mutually exclusive with --dynamic-ledger. "
+        "When on, each task is preceded by a dual-embedding retrieval "
+        "into the per-domain cheatsheet; the cheatsheet block is "
+        "prepended to the user message of initial_messages.json; the "
+        "agent emits a <citations>[...] line on the last line of its "
+        "final_answer.reasoning that is stripped before grading. After "
+        "grading, the boolean criteria_passed==criteria_total is threaded "
+        "into a reflector + curator pair (both same model as the agent), "
+        "which produce <cheatsheet_updates> ops applied to the ledger. "
+        "See docs/TRACE_PRD.md.",
+    ),
+    trace_top_k: int = typer.Option(
+        5,
+        "--trace-top-k",
+        min=0,
+        help="Top-k per retrieval axis when TRACE is on.",
+    ),
 ) -> None:
     """Run APEX-Agents on a slice of tasks. ONE run per (task, model), always.
 
@@ -580,6 +601,13 @@ def run(
     from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
     from apex_agents_bench.runner import RunOptions
     from apex_agents_bench.runner import run as run_runner
+    from apex_agents_bench.trace.config import TraceConfig
+
+    if dynamic_ledger and trace:
+        console.print(
+            "[red]error:[/red] --dynamic-ledger and --trace are mutually exclusive; pick one."
+        )
+        raise typer.Exit(code=2)
 
     _validate_domain(domain)
 
@@ -622,6 +650,10 @@ def run(
         dynamic_ledger=DynamicLedgerConfig(
             enabled=dynamic_ledger,
             top_k_per_axis=dynamic_ledger_top_k,
+        ),
+        trace=TraceConfig(
+            enabled=trace,
+            top_k_per_axis=trace_top_k,
         ),
     )
 
