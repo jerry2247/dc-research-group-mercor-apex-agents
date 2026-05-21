@@ -31,6 +31,7 @@ byte-for-byte from the published example.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import hashlib
 import json
 import logging
@@ -40,7 +41,7 @@ import subprocess
 import sys
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,7 @@ from apex_agents_bench.judge import (
     write_scoring_config,
     write_verifiers,
 )
+from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
 from apex_agents_bench.paths import (
     archipelago_agents_dir,
     archipelago_environment_dir,
@@ -147,6 +149,11 @@ class RunOptions:
     task_ids: tuple[str, ...] | None = None
     start_index: int = 0
     limit: int | None = None
+    dynamic_ledger: DynamicLedgerConfig = field(default_factory=DynamicLedgerConfig)
+    """Dynamic Ledger (no-GT) configuration. When ``enabled=False``
+    (default) the runner takes the baseline code path and the CSV schema
+    is byte-identical to the no-ledger shape. See
+    ``docs/DYNAMIC_LEDGER_PRD.md``."""
 
 
 @dataclass(frozen=True)
@@ -205,6 +212,36 @@ CSV_HEADERS: list[str] = [
 ]
 
 
+_DYNAMIC_LEDGER_CSV_COLUMNS: tuple[str, ...] = (
+    "dynamic_ledger_enabled",
+    "dynamic_ledger_snapshot_index_before",
+    "retrieved_entry_count",
+    "retrieved_entry_ids",
+    "curator_create_count",
+    "curator_create_blocked_count",
+    "curator_update_count",
+    "curator_delete_count",
+    "dynamic_ledger_active_entry_count_after",
+    "dynamic_ledger_total_entry_count_after",
+    "dynamic_ledger_total_active_chars_after",
+    "curator_prompt_tokens",
+    "curator_completion_tokens",
+    "curator_wall_seconds",
+    "trajectory_chars_seen_by_curator",
+)
+
+
+def csv_headers_with_dynamic_ledger() -> list[str]:
+    """Return the CSV header list with the Dynamic Ledger columns appended.
+
+    When the Dynamic Ledger is OFF the runner uses :data:`CSV_HEADERS` directly; this
+    helper is only invoked from the ledger-on code path. The baseline
+    header order is preserved as a prefix — verified by
+    ``test_dynamic_ledger_on_csv_extends_baseline_at_end``.
+    """
+    return list(CSV_HEADERS) + list(_DYNAMIC_LEDGER_CSV_COLUMNS)
+
+
 # -----------------------------------------------------------------------------
 # Resume / IO
 # -----------------------------------------------------------------------------
@@ -222,11 +259,21 @@ def load_completed_task_ids(output_csv: Path) -> set[str]:
     return completed
 
 
-def append_row(output_csv: Path, row: dict[str, object]) -> None:
+def append_row(
+    output_csv: Path,
+    row: dict[str, object],
+    *,
+    headers: list[str] | None = None,
+) -> None:
+    """Append ``row`` to ``output_csv``. ``headers`` defaults to
+    :data:`CSV_HEADERS` (baseline) when not provided; when the Dynamic
+    Ledger is on, pass :func:`csv_headers_with_dynamic_ledger` so the extra
+    columns make it into the file."""
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     new_file = not output_csv.is_file()
+    fieldnames = headers if headers is not None else CSV_HEADERS
     with output_csv.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_HEADERS, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         if new_file:
             writer.writeheader()
         writer.writerow(row)
@@ -622,12 +669,28 @@ def run_single_task(
     task: Task,
     output_dir: Path,
     hf_token: str | None = None,
-) -> TaskOutcome:
-    """Run ONE task end-to-end. Returns the row fields for :func:`append_row`.
+    dynamic_ledger_runtime: Any | None = None,  # DynamicLedgerRuntime | None
+) -> tuple[TaskOutcome, dict | None]:
+    """Run ONE task end-to-end. Returns ``(outcome, dynamic_ledger_csv_fragment)``.
 
     The orchestration shape is a direct port of upstream
     ``examples/hugging_face_task/main.py::main`` for a single task, with the
     judge model and orchestrator model swapped per our config.
+
+    When ``dynamic_ledger_runtime`` is ``None``, the function takes the BASELINE
+    code path — no Dynamic Ledger imports, no retrieval, no curator. The
+    returned ``dynamic_ledger_csv_fragment`` is ``None`` in that case;
+    callers must NOT add any Dynamic Ledger columns. This is the byte-
+    identical baseline preserved by
+    ``test_dynamic_ledger_off_csv_schema_unchanged``.
+
+    When ``dynamic_ledger_runtime`` is provided (the Dynamic Ledger is on),
+    two hooks fire: (A) retrieve + prepend strategies block to the USER
+    message of ``initial_messages.json`` before the agent subprocess
+    runs; (B) call the curator after grading, apply ``<memory_updates>``
+    ops, persist the per-domain snapshot. None of the GT data (criteria,
+    scores, expected answer, judge rationale) is threaded into the
+    curator.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -666,6 +729,45 @@ def run_single_task(
         initial_messages_path.write_text(
             json.dumps(initial_messages, indent=2) + "\n", encoding="utf-8"
         )
+
+        # --- Memory Hook A: retrieve + augment initial_messages.json -------
+        dynamic_ledger_csv: dict[str, Any] = {}
+        retrieved_entries: list[Any] = []
+        snapshot_index_before = 0
+        if dynamic_ledger_runtime is not None:
+            from apex_agents_bench.dynamic_ledger import augment_initial_messages, retrieve
+            from apex_agents_bench.dynamic_ledger.runtime import dynamic_ledger_csv_fragment_empty
+
+            dynamic_ledger_csv = dynamic_ledger_csv_fragment_empty()
+            store = dynamic_ledger_runtime.store_for(task.domain)
+            snapshot_index_before = dynamic_ledger_runtime.next_ordinal.get(task.domain, 0)
+            dynamic_ledger_csv["dynamic_ledger_snapshot_index_before"] = snapshot_index_before
+            try:
+                q_emb = dynamic_ledger_runtime.embed.embed([task.prompt])[0]
+                retrieved_entries = retrieve(
+                    store,
+                    query_embedding=q_emb,
+                    k=dynamic_ledger_runtime.cfg.top_k_per_axis,
+                    similarity_threshold=dynamic_ledger_runtime.cfg.retrieval_similarity_threshold,
+                )
+            except Exception as exc:
+                log.warning(
+                    "dynamic ledger: retrieval failed for task=%s domain=%s (%s); proceeding without retrieval",
+                    task.task_id,
+                    task.domain,
+                    exc,
+                )
+                retrieved_entries = []
+            dynamic_ledger_csv["retrieved_entry_count"] = len(retrieved_entries)
+            dynamic_ledger_csv["retrieved_entry_ids"] = json.dumps([e.entry_id for e in retrieved_entries])
+            if retrieved_entries:
+                try:
+                    augment_initial_messages(initial_messages_path, entries=retrieved_entries)
+                except Exception as exc:
+                    log.warning(
+                        "dynamic ledger: injecting strategies into initial_messages failed (%s); leaving file unchanged",
+                        exc,
+                    )
 
         # --- Build the agent-config file (locked policy) -------------------
         agent_config = {
@@ -712,6 +814,11 @@ def run_single_task(
             traj.time_elapsed_seconds,
         )
 
+        # Grading always reads the original trajectory.json. The Dynamic
+        # Ledger no longer rewrites the agent's response — there are no
+        # citations to strip and no shadow trajectory.
+        trajectory_for_grading = trajectory_path
+
         # --- Stream the final snapshot out ---------------------------------
         final_tar_gz = output_dir / "final_snapshot.tar.gz"
         log.info("streaming final snapshot to %s", final_tar_gz)
@@ -746,7 +853,7 @@ def run_single_task(
                 trajectory_id=trajectory_id,
                 initial_snapshot=world_zip,
                 final_snapshot=final_zip,
-                trajectory_path=trajectory_path,
+                trajectory_path=trajectory_for_grading,
                 grading_settings_path=grading_settings_path,
                 verifiers_path=verifiers_path,
                 eval_configs_path=eval_configs_path,
@@ -782,7 +889,7 @@ def run_single_task(
             )
 
         wall_time = time.time() - started_at
-        return TaskOutcome(
+        outcome = TaskOutcome(
             task_id=task.task_id,
             domain=task.domain,
             world_id=task.world_id,
@@ -800,6 +907,85 @@ def run_single_task(
             agent_usage_source=traj.agent_usage_source,
             agent_usage_consistent=traj.agent_usage_consistent,
         )
+
+        # --- Memory Hook C: render trajectory + curator + apply + persist -
+        # We ALWAYS curate when the Dynamic Ledger is on. The agent's status
+        # (completed/failed/error/cancelled) is NOT used as a gating signal:
+        # whether the agent reached final_answer is itself a coarse outcome
+        # proxy we deliberately do not condition on. If there is nothing
+        # useful in the trajectory, the curator emits NO_OP — that's the
+        # curator's call, not the wrapper's. No GT data is passed to the
+        # curator either way. Per PRD §4.5 +
+        # test_curator_signature_has_no_outcome.
+        if dynamic_ledger_runtime is not None:
+            from apex_agents_bench.dynamic_ledger import (
+                apply_ops,
+                curate,
+                render_trajectory_for_curator,
+            )
+
+            store = dynamic_ledger_runtime.store_for(task.domain)
+            ordinal = dynamic_ledger_runtime.current_ordinal_for(task.domain)
+            try:
+                traj_json = json.loads(trajectory_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                log.warning("dynamic ledger: re-reading trajectory.json failed (%s)", exc)
+                traj_json = {}
+            rendered = render_trajectory_for_curator(
+                traj_json,
+                max_chars_per_tool_result=dynamic_ledger_runtime.cfg.trajectory_max_chars_per_tool_result,
+            )
+            dynamic_ledger_csv["trajectory_chars_seen_by_curator"] = len(rendered)
+            try:
+                curator_result = curate(
+                    store,
+                    task.prompt,  # WITHOUT injection
+                    rendered,
+                    cfg=dynamic_ledger_runtime.cfg,
+                )
+                stats = apply_ops(
+                    store=store,
+                    ops=curator_result.ops,
+                    retrieved=retrieved_entries,
+                    embed=dynamic_ledger_runtime.embed,
+                    cfg=dynamic_ledger_runtime.cfg,
+                    current_ordinal=ordinal,
+                )
+                dynamic_ledger_runtime.persist(task.domain)
+                dynamic_ledger_runtime.snapshot_stores[task.domain].append_curator_log(
+                    {
+                        "task_id": task.task_id,
+                        "ordinal": ordinal,
+                        "create": stats.create_committed,
+                        "create_blocked": stats.create_blocked,
+                        "update": stats.update,
+                        "delete": stats.delete,
+                        "parse_error": curator_result.parse_error,
+                        "prompt_tokens": curator_result.prompt_tokens,
+                        "completion_tokens": curator_result.completion_tokens,
+                        "wall_seconds": curator_result.wall_seconds,
+                    }
+                )
+                dynamic_ledger_csv["curator_create_count"] = stats.create_committed
+                dynamic_ledger_csv["curator_create_blocked_count"] = stats.create_blocked
+                dynamic_ledger_csv["curator_update_count"] = stats.update
+                dynamic_ledger_csv["curator_delete_count"] = stats.delete
+                dynamic_ledger_csv["curator_prompt_tokens"] = curator_result.prompt_tokens
+                dynamic_ledger_csv["curator_completion_tokens"] = curator_result.completion_tokens
+                dynamic_ledger_csv["curator_wall_seconds"] = curator_result.wall_seconds
+            except Exception as exc:
+                log.warning(
+                    "dynamic ledger: curator failed for task=%s domain=%s (%s); leaving ledger unchanged",
+                    task.task_id,
+                    task.domain,
+                    exc,
+                )
+            active = store.active_entries()
+            dynamic_ledger_csv["dynamic_ledger_active_entry_count_after"] = len(active)
+            dynamic_ledger_csv["dynamic_ledger_total_entry_count_after"] = len(store.entries)
+            dynamic_ledger_csv["dynamic_ledger_total_active_chars_after"] = sum(len(e.content) for e in active)
+
+        return outcome, (dynamic_ledger_csv if dynamic_ledger_runtime is not None else None)
 
     finally:
         stop_env(env_container)
@@ -887,6 +1073,49 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
         len(pending),
     )
 
+    # --- Memory: build per-run runtime (when enabled) ------------------------
+    dynamic_ledger_runtime: Any | None = None
+    if opts.dynamic_ledger.enabled:
+        from apex_agents_bench.dynamic_ledger.runtime import DynamicLedgerRuntime
+
+        run_dir = opts.output_csv.parent
+        completed_per_domain: dict[str, int] = {}
+        if opts.output_csv.is_file():
+            try:
+                with opts.output_csv.open("r", encoding="utf-8") as fh:
+                    rdr = csv.DictReader(fh)
+                    for r in rdr:
+                        d = r.get("domain", "")
+                        if r.get("status") == "completed" and d:
+                            completed_per_domain[d] = completed_per_domain.get(d, 0) + 1
+            except Exception:
+                completed_per_domain = {}
+
+        # The curator runs on the SAME model as the agent profile under
+        # test, with the same thinking effort. Only the judge model is
+        # fixed (gpt-5.5 medium). Fill the curator model in from the
+        # active AgentProfile here unless the user has set it explicitly.
+        # See docs/DYNAMIC_LEDGER_PRD.md.
+        cfg_in = opts.dynamic_ledger
+        if cfg_in.curator_model is None:
+            cfg_in = dataclasses.replace(
+                cfg_in,
+                curator_model=opts.profile.orchestrator_model,
+                curator_extra_args=dict(opts.profile.orchestrator_extra_args or {}),
+            )
+
+        dynamic_ledger_runtime = DynamicLedgerRuntime.create(
+            cfg=cfg_in,
+            run_dir=run_dir,
+            completed_per_domain=completed_per_domain,
+        )
+        log.info(
+            "dynamic ledger: enabled (embedding=%s top_k=%d snapshot_root=%s)",
+            opts.dynamic_ledger.embedding_model,
+            opts.dynamic_ledger.top_k_per_axis,
+            run_dir / "dynamic_ledger",
+        )
+
     write_manifest(
         opts.output_csv,
         build_run_manifest(opts, selected, pending, status="starting"),
@@ -926,12 +1155,13 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             opts.profile.name,
         )
         try:
-            outcome = run_single_task(
+            outcome, dynamic_ledger_csv_fragment = run_single_task(
                 settings=opts.settings,
                 profile=opts.profile,
                 task=task,
                 output_dir=per_task_dir,
                 hf_token=hf_token,
+                dynamic_ledger_runtime=dynamic_ledger_runtime,
             )
         except KeyboardInterrupt:
             log.warning("interrupted; %d tasks completed before stop", saved)
@@ -1005,7 +1235,13 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             "trajectory_path": str(per_task_dir / "trajectory.json"),
             "grades_path": str(per_task_dir / "grades.json"),
         }
-        append_row(opts.output_csv, row)
+        if dynamic_ledger_csv_fragment is not None:
+            row.update(dynamic_ledger_csv_fragment)
+        append_row(
+            opts.output_csv,
+            row,
+            headers=csv_headers_with_dynamic_ledger() if opts.dynamic_ledger.enabled else None,
+        )
         saved += 1
         log.info(
             "[%d/%d] task_id=%s score=%.3f (%d/%d criteria)",

@@ -176,7 +176,11 @@ def start_env(
         [*docker_compose_command(), "up", "-d", "--build"],
         cwd=str(compose_dir),
         env=env,
-        timeout=900,
+        # 30 min: build context transfer + Postgres image pulls + BuildKit cache
+        # verification can exceed 15 min on slow networks even when the image
+        # is already locally present. Empirically 900s was too tight on first
+        # task after a cold Docker Desktop start.
+        timeout=1800,
         check=False,
     )
     if r.returncode != 0:

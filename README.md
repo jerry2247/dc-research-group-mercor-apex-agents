@@ -36,6 +36,147 @@ audit; see [`docs/AUDIT.md`](docs/AUDIT.md).
 
 ---
 
+## Dynamic Ledger — our extension
+
+The contribution this repository carries beyond the baseline harness
+is **Dynamic Ledger**: a no-ground-truth, per-domain, dual-retrieval
+playbook of workflows the agent accumulates *during* an evaluation run.
+After each task the curator (same model as the agent under test; only
+the judge is fixed at gpt-5.5) reads the agent's full trajectory
+— with no access to the rubric, the score, or the expected answer — and
+emits a single JSON array of edit operations against the per-domain
+ledger. Future tasks in the same domain retrieve from the updated
+ledger and inject the most-relevant entries into the user prompt before
+the agent starts. The ledger is off by default; enable with
+`--dynamic-ledger` (the baseline pipeline is byte-identical when off).
+See [`docs/DYNAMIC_LEDGER_PRD.md`](docs/DYNAMIC_LEDGER_PRD.md) for the
+full specification.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  DYNAMIC LEDGER — per-task lifecycle  (NO ground-truth signal anywhere)     │
+│  ─────────────────────────────────────────────────────────────────────────  │
+│                                                                             │
+│   Per-domain ledger                       task.prompt                       │
+│   (active entries only;                       │                             │
+│    persisted between tasks)                   │  embed via                  │
+│            │                                  │  text-embedding-3-large     │
+│            ▼                                  ▼                             │
+│   ┌─────────────────────────────────────────────────────┐                   │
+│   │  ❶  RETRIEVE      dual top-k cosine, k=5 per axis    │                  │
+│   │       top-k( content_embedding )                     │                  │
+│   │          ∪                                           │                  │
+│   │       top-k( source_problem_embedding )              │                  │
+│   │       → deduped subset (≤ 2k entries)                │                  │
+│   └────────────────────────┬────────────────────────────┘                   │
+│                            ▼                                                │
+│   ┌─────────────────────────────────────────────────────┐                   │
+│   │  ❷  INJECT       render strategies block;            │                  │
+│   │                  prepend to USER message of          │                  │
+│   │                  initial_messages.json               │                  │
+│   │                  (vendor system prompt UNCHANGED)    │                  │
+│   └────────────────────────┬────────────────────────────┘                   │
+│                            ▼                                                │
+│   ┌─────────────────────────────────────────────────────┐                   │
+│   │  ❸  AGENT        Archipelago react_toolbelt          │                  │
+│   │                  (vendored, byte-equivalent)         │                  │
+│   │                  9 MCP servers · multi-turn ReAct    │                  │
+│   │                  → final_answer{answer, reasoning}   │                  │
+│   └────────────────────────┬────────────────────────────┘                   │
+│                            │  trajectory.json                               │
+│                            ▼                                                │
+│   ┌─────────────────────────────────────────────────────┐                   │
+│   │  ❹  GRADE  (vendored grader subprocess)              │                  │
+│   │      reads trajectory.json                           │                  │
+│   │      writes grades.json + results.csv row            │                  │
+│   └────────────────────────┬────────────────────────────┘                   │
+│                            │                                                │
+│                            ▼     (NO arrow from GRADE to CURATE)            │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  ❺  CURATE     single LLM call (same model as the agent profile)│       │
+│   │                                                                 │       │
+│   │   Inputs:                                                       │       │
+│   │     · active playbook (Dynamic Ledger for this domain)          │       │
+│   │     · task prompt (no injection prefix)                         │       │
+│   │     · full trajectory (tool results truncated, calls + reason   │       │
+│   │       in full)                                                  │       │
+│   │     ╳ no criteria · no score · no expected answer · no rubric   │       │
+│   │                                                                 │       │
+│   │   Output  (single JSON array of ops):                           │       │
+│   │     <memory_updates>[                                           │       │
+│   │       { "op":"CREATE",  "section","content","source_problem" },│       │
+│   │       { "op":"UPDATE",  "entry_id","content" },                │       │
+│   │       { "op":"CONSOLIDATE", "entry_ids":[…], … },               │       │
+│   │       { "op":"DELETE",  "entry_id" },                           │       │
+│   │       { "op":"NO_OP",   "reason" }                              │       │
+│   │     ]</memory_updates>                                          │       │
+│   │                                                                 │       │
+│   │   Apply order:   DELETE → CONSOLIDATE → UPDATE → CREATE         │       │
+│   │   CREATE is gated: cosine-block against the retrieved subset    │       │
+│   │   prevents near-duplicate entries.                              │       │
+│   └────────────────────────────────┬────────────────────────────────┘       │
+│                                    │ updated ledger                         │
+│                                    ▼                                        │
+│         runs/<run>/dynamic_ledger/<Domain>/snapshot_NNNN.json               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**The five-stage shape and its tag-name (`<memory_updates>`) follow
+Suzgun et al.'s published Dynamic Ledger spec.** Our extensions, all
+documented in [`docs/DYNAMIC_LEDGER_PRD.md`](docs/DYNAMIC_LEDGER_PRD.md):
+
+- **No ground truth** to the curator (load-bearing fidelity test:
+  `tests/test_dynamic_ledger_fidelity.py::test_curator_signature_has_no_outcome`).
+- **Critical-diagnosis curator framing** — the curator acts as a senior
+  reviewer that critiques the colleague's work, not a chronicler.
+- **Multi-op output by default** (the curator emits 2–4 ops per session
+  covering distinct lessons of varied scope).
+- **Two entry shapes** — elaborate playbook entries (multi-paragraph
+  tool-call workflows) and focused action notes (one-paragraph
+  quirk/recovery notes).
+- **Per-domain isolation** — each domain has its own ledger and snapshot
+  history; never cross-domain retrieval.
+
+### Results
+
+We report **Pass@1** (final score = 100) and **mean score** (Mercor's
+0/100 per-criterion average), one run per (task, model). The
+Dynamic-Ledger-on column is intentionally empty pending the planned
+sweep; the baseline column is what's currently in
+`runs/ib-world219-grok43high/`.
+
+| Method | IB World 219 (14-task pilot) Pass@1 | IB World 219 mean | Full IB (160 tasks) | Full Law (160 tasks) | Full MC (160 tasks) |
+|---|---|---|---|---|---|
+| Baseline · grok-4.3-high · no ledger | **0 / 14 = 0.0 %** | **0.00** | _not yet run_ | _not yet run_ | _not yet run_ |
+| Dynamic Ledger · grok-4.3-high · `--dynamic-ledger` | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| _Public reference_ — GPT-5.5 (xHigh), Mercor leaderboard | n/a | n/a | _pending fetch_ | _pending fetch_ | _pending fetch_ |
+
+> **Reading the baseline.** Three of the 14 World-219 IB tasks ended
+> with `agent_status='failed'` after the agent exhausted `max_steps=50`
+> in a `sheets_server` retry loop; the remaining 11 produced a wrong
+> `final_answer`. Grading was correct — the vendor judge applies
+> rounding-to-criterion-precision tolerance and rejects anything else.
+> See `runs/ib-world219-grok43high/results.failures.jsonl` for the
+> per-task failure log.
+
+### Enabling the Dynamic Ledger
+
+```bash
+apex-agents-bench run --model grok-4.3-high \
+    --world world_1e4d4288e63f4a08851a3cc441eb3ccb \
+    --dynamic-ledger \
+    --output runs/ib-w219-grok43high-ledger/results.csv
+```
+
+The CLI surface is `--dynamic-ledger / --no-dynamic-ledger`. Default is
+off (the baseline path); when off, the CSV schema is byte-identical to
+the no-ledger shape. When on, snapshots of the ledger and a curator
+audit log are written to `runs/<run>/dynamic_ledger/<Domain>/`.
+
+---
+
 ## TL;DR
 
 A one-task pilot on Investment Banking at the cheapest profile,
@@ -65,6 +206,7 @@ left off; completed tasks are never re-paid.
 
 ## Table of contents
 
+0. [Dynamic Ledger — our extension](#dynamic-ledger--our-extension)  ←  architecture diagram + results table
 1. [What this is, in five lines](#1-what-this-is-in-five-lines)
 2. [First-time setup](#2-first-time-setup)
 3. [Running the benchmark](#3-running-the-benchmark)  ←  the section most readers want

@@ -547,6 +547,27 @@ def run(
         min=60,
         help=f"Per-task wall-clock cap. Matches Mercor's published example default ({AGENT_TIMEOUT_SECONDS}s).",
     ),
+    dynamic_ledger: bool = typer.Option(
+        False,
+        "--dynamic-ledger/--no-dynamic-ledger",
+        help="Enable the Dynamic Ledger (no-ground-truth) subsystem. "
+        "Default: off. When on, each task is preceded by a dual-embedding "
+        "retrieval into the per-domain ledger; the strategies block is "
+        "prepended to the user message of initial_messages.json; after "
+        "grading, the curator examines the agent's full trajectory and "
+        "emits <memory_updates> JSON ops that the wrapper applies to the "
+        "ledger. The curator runs on the same model as the selected "
+        "agent profile (only the judge is fixed at gpt-5.5). See "
+        "docs/DYNAMIC_LEDGER_PRD.md.",
+    ),
+    dynamic_ledger_top_k: int = typer.Option(
+        5,
+        "--dynamic-ledger-top-k",
+        min=0,
+        help="Top-k per retrieval axis when the Dynamic Ledger is on. "
+        "Retrieval is dual-axis: top-k by content-embedding plus top-k "
+        "by source-problem embedding, then deduped by entry_id.",
+    ),
 ) -> None:
     """Run APEX-Agents on a slice of tasks. ONE run per (task, model), always.
 
@@ -556,6 +577,7 @@ def run(
       apex-agents-bench run --model gpt-5.5-medium --task-ids task_9ba58a6...,task_abc...
     """
     from apex_agents_bench.agent_profile import get_profile
+    from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
     from apex_agents_bench.runner import RunOptions
     from apex_agents_bench.runner import run as run_runner
 
@@ -597,6 +619,10 @@ def run(
         task_ids=ids_tuple,
         start_index=start_index,
         limit=limit,
+        dynamic_ledger=DynamicLedgerConfig(
+            enabled=dynamic_ledger,
+            top_k_per_axis=dynamic_ledger_top_k,
+        ),
     )
 
     console.print(

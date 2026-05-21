@@ -20,7 +20,7 @@ from pathlib import Path
 from apex_agents_bench.agent_profile import AgentProfile
 from apex_agents_bench.config import Settings
 from apex_agents_bench.dataset import Task, load_tasks
-from apex_agents_bench.runner import TaskOutcome, run_single_task
+from apex_agents_bench.runner import run_single_task
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def run_smoke(
         output_dir = settings.runs_dir / "smoke" / f"{profile.name}__{task.task_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    outcome: TaskOutcome = run_single_task(
+    outcome, _ = run_single_task(
         settings=settings,
         profile=profile,
         task=task,
