@@ -201,3 +201,27 @@ apex-agents-bench run \
 
 The first task in a domain starts from an empty cheatsheet. Subsequent
 tasks see the reflector + curator's accumulated edits.
+
+## Citation
+
+This subsystem implements the **TRACE** method (Tool-augmented
+Reasoning via Atomic Cheatsheet Editing) by Liao, Nair, and Yang,
+published as a Stanford CS224N final project. We follow the paper's
+reflector + curator pipeline with the adaptations enumerated above
+(OpenAI embeddings, no bullet length cap, no SFT step, same model for
+the reflector and curator and agent, GT bit = boolean
+`criteria_passed == criteria_total`).
+
+```bibtex
+@misc{liao2025trace,
+  title  = {TRACE: Tool-augmented Reasoning via Atomic Cheatsheet Editing},
+  author = {Liao, ... and Nair, ... and Yang, ...},
+  year   = {2025},
+  note   = {Stanford CS224N project},
+  url    = {https://web.stanford.edu/class/cs224n/project.html}
+}
+```
+
+If a canonical citation entry becomes available (e.g., arXiv or
+workshop submission), this block should be updated to match.
+

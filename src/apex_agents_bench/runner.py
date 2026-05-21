@@ -63,6 +63,7 @@ from apex_agents_bench.judge import (
     write_scoring_config,
     write_verifiers,
 )
+from apex_agents_bench.azure_routing import AzureConfig, route_model_id
 from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
 from apex_agents_bench.trace.config import TraceConfig
 from apex_agents_bench.paths import (
@@ -162,6 +163,14 @@ class RunOptions:
     ``trace.enabled`` may be True. When ``trace.enabled=True`` the
     runner threads the boolean ``criteria_passed == criteria_total``
     into the reflector and curator. See ``docs/TRACE_PRD.md``."""
+
+    azure: AzureConfig = field(default_factory=AzureConfig)
+    """Azure-OpenAI routing for GPT-5.5 chat completions. When
+    ``enabled=True`` any ``gpt-5.5*`` model id (judge, agent profile,
+    Dynamic Ledger curator, TRACE reflector/curator) is rewritten to
+    ``azure/<deployment_name>`` before reaching LiteLLM. The embedding
+    model (``text-embedding-3-large``) is always served by OpenAI
+    regardless of this setting. See ``apex_agents_bench/azure_routing.py``."""
 
 
 @dataclass(frozen=True)
@@ -401,6 +410,8 @@ def _vendor_upstream_commit() -> str | None:
 
 
 def _required_api_key(model_id: str, provider: str | None = None) -> str | None:
+    if provider == "azure" or model_id.startswith("azure/"):
+        return "AZURE_API_KEY"
     if provider == "xai" or model_id.startswith(("xai/", "grok")):
         return "XAI_API_KEY"
     if provider == "openai" or model_id.startswith(("openai/", "gpt-", "o1", "o3", "o4")):
@@ -437,11 +448,22 @@ def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str
         pass
 
     missing: list[str] = []
-    agent_key = _required_api_key(opts.profile.orchestrator_model, opts.profile.provider)
-    judge_key = _required_api_key(opts.settings.judge.model_id)
+    # Apply Azure routing BEFORE the credential check so we look for the
+    # right env var (AZURE_API_KEY) when the routed model id is azure/...
+    routed_agent = route_model_id(opts.profile.orchestrator_model, cfg=opts.azure)
+    routed_judge = route_model_id(opts.settings.judge.model_id, cfg=opts.azure)
+    agent_key = _required_api_key(
+        routed_agent,
+        "azure" if routed_agent.startswith("azure/") else opts.profile.provider,
+    )
+    judge_key = _required_api_key(routed_judge)
     for key in (agent_key, judge_key):
         if key and not os.environ.get(key) and key not in missing:
             missing.append(key)
+    # Embeddings always go through OpenAI, even with Azure routing on
+    if (opts.dynamic_ledger.enabled or opts.trace.enabled) and not os.environ.get("OPENAI_API_KEY"):
+        if "OPENAI_API_KEY" not in missing:
+            missing.append("OPENAI_API_KEY")
     if _needs_hf_token(opts.settings, selected) and not (hf_token or os.environ.get("HF_TOKEN")):
         missing.append("HF_TOKEN")
     if missing:
@@ -718,6 +740,7 @@ def run_single_task(
     hf_token: str | None = None,
     dynamic_ledger_runtime: Any | None = None,  # DynamicLedgerRuntime | None
     trace_runtime: Any | None = None,           # TraceRuntime | None
+    azure_cfg: AzureConfig | None = None,
 ) -> tuple[TaskOutcome, dict | None]:
     """Run ONE task end-to-end. Returns ``(outcome, dynamic_ledger_csv_fragment)``.
 
@@ -872,13 +895,17 @@ def run_single_task(
         )
 
         # --- Run the agent --------------------------------------------------
+        # When Azure is on and the profile is gpt-5.5*, route the
+        # subprocess's orchestrator model to azure/<deployment>.
+        azure_eff = azure_cfg or AzureConfig()
+        routed_orchestrator = route_model_id(profile.orchestrator_model, cfg=azure_eff)
         trajectory_path = output_dir / "trajectory.json"
         rc = _run_agent_subprocess(
             trajectory_id=trajectory_id,
             initial_messages_path=initial_messages_path,
             mcp_gateway_url=f"{env_container.base_url}/mcp/",
             agent_config_path=agent_config_path,
-            orchestrator_model=profile.orchestrator_model,
+            orchestrator_model=routed_orchestrator,
             orchestrator_extra_args_path=extra_args_path,
             trajectory_out=trajectory_path,
         )
@@ -939,8 +966,15 @@ def run_single_task(
             raise RuntimeError(f"agent subprocess exited with code {rc}")
 
         # --- Grading config files ------------------------------------------
+        # Route the judge model id when Azure is on (gpt-5.5 →
+        # azure/<deployment>). Vendor grader reads
+        # grading_settings.json verbatim.
+        judge_for_grading = dataclasses.replace(
+            settings.judge,
+            model_id=route_model_id(settings.judge.model_id, cfg=azure_eff),
+        )
         grading_settings_path = write_grading_settings(
-            settings.judge, output_dir / "grading_settings.json"
+            judge_for_grading, output_dir / "grading_settings.json"
         )
         verifiers_path = write_verifiers(task, output_dir / "verifiers.json")
         eval_configs_path = write_eval_configs(output_dir / "eval_configs.json")
@@ -1311,8 +1345,8 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
         # The curator runs on the SAME model as the agent profile under
         # test, with the same thinking effort. Only the judge model is
         # fixed (gpt-5.5 medium). Fill the curator model in from the
-        # active AgentProfile here unless the user has set it explicitly.
-        # See docs/DYNAMIC_LEDGER_PRD.md.
+        # active AgentProfile here unless the user has set it explicitly,
+        # then apply Azure routing.
         cfg_in = opts.dynamic_ledger
         if cfg_in.curator_model is None:
             cfg_in = dataclasses.replace(
@@ -1320,6 +1354,9 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
                 curator_model=opts.profile.orchestrator_model,
                 curator_extra_args=dict(opts.profile.orchestrator_extra_args or {}),
             )
+        cfg_in = dataclasses.replace(
+            cfg_in, curator_model=route_model_id(cfg_in.curator_model, cfg=opts.azure)
+        )
 
         dynamic_ledger_runtime = DynamicLedgerRuntime.create(
             cfg=cfg_in,
@@ -1367,6 +1404,11 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
                 curator_model=cfg_trace_in.curator_model or opts.profile.orchestrator_model,
                 model_extra_args=dict(opts.profile.orchestrator_extra_args or {}),
             )
+        cfg_trace_in = dataclasses.replace(
+            cfg_trace_in,
+            reflector_model=route_model_id(cfg_trace_in.reflector_model, cfg=opts.azure),
+            curator_model=route_model_id(cfg_trace_in.curator_model, cfg=opts.azure),
+        )
 
         trace_runtime = TraceRuntime.create(
             cfg=cfg_trace_in,
@@ -1427,6 +1469,7 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
                 hf_token=hf_token,
                 dynamic_ledger_runtime=dynamic_ledger_runtime,
                 trace_runtime=trace_runtime,
+                azure_cfg=opts.azure,
             )
         except KeyboardInterrupt:
             log.warning("interrupted; %d tasks completed before stop", saved)

@@ -177,9 +177,14 @@ sweep; the baseline column is what's currently in
 
 | Method | IB World 219 (14-task pilot) Pass@1 | IB World 219 mean | Full IB (160 tasks) | Full Law (160 tasks) | Full MC (160 tasks) |
 |---|---|---|---|---|---|
-| Baseline · grok-4.3-high · no ledger | **0 / 14 = 0.0 %** | **0.00** | _not yet run_ | _not yet run_ | _not yet run_ |
+| Baseline · grok-4.3-high · no memory | **0 / 14 = 0.0 %** | **0.00** | _not yet run_ | _not yet run_ | _not yet run_ |
 | Dynamic Ledger · grok-4.3-high · `--dynamic-ledger` | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| TRACE · grok-4.3-high · `--trace` | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
 | _Public reference_ — GPT-5.5 (xHigh), Mercor leaderboard | n/a | n/a | _pending fetch_ | _pending fetch_ | _pending fetch_ |
+
+Method spec: [`docs/DYNAMIC_LEDGER_PRD.md`](docs/DYNAMIC_LEDGER_PRD.md)
+(no-GT) and [`docs/TRACE_PRD.md`](docs/TRACE_PRD.md) (uses-GT).
+Project-wide context: [`docs/PROJECT.md`](docs/PROJECT.md).
 
 > **Reading the baseline.** Three of the 14 World-219 IB tasks ended
 > with `agent_status='failed'` after the agent exhausted `max_steps=50`

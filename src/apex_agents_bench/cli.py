@@ -589,6 +589,17 @@ def run(
         min=0,
         help="Top-k per retrieval axis when TRACE is on.",
     ),
+    azure: bool = typer.Option(
+        False,
+        "--azure/--no-azure",
+        help="Route GPT-5.5 chat completions (judge + agent profile + DL "
+        "curator + TRACE reflector/curator) through Azure-OpenAI instead "
+        "of OpenAI. Requires AZURE_API_KEY, AZURE_API_BASE, and "
+        "AZURE_API_VERSION env vars; the Azure deployment name comes from "
+        "AZURE_GPT55_DEPLOYMENT_NAME (default `gpt-5.5`). The embedding "
+        "model (text-embedding-3-large) is always served by OpenAI "
+        "regardless of this flag.",
+    ),
 ) -> None:
     """Run APEX-Agents on a slice of tasks. ONE run per (task, model), always.
 
@@ -598,6 +609,7 @@ def run(
       apex-agents-bench run --model gpt-5.5-medium --task-ids task_9ba58a6...,task_abc...
     """
     from apex_agents_bench.agent_profile import get_profile
+    from apex_agents_bench.azure_routing import AzureConfig
     from apex_agents_bench.dynamic_ledger.config import DynamicLedgerConfig
     from apex_agents_bench.runner import RunOptions
     from apex_agents_bench.runner import run as run_runner
@@ -655,6 +667,7 @@ def run(
             enabled=trace,
             top_k_per_axis=trace_top_k,
         ),
+        azure=AzureConfig(enabled=azure),
     )
 
     console.print(
