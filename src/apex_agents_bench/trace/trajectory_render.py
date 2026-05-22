@@ -18,7 +18,7 @@ def _truncate(text: str, cap: int) -> str:
 def render_trajectory_for_curator(
     trajectory: dict,
     *,
-    max_chars_per_tool_result: int = 4000,
+    max_chars_per_tool_result: int = 8000,
 ) -> str:
     msgs = trajectory.get("messages") or []
     out: list[str] = []

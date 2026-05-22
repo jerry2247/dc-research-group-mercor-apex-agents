@@ -115,7 +115,7 @@ def extract_and_strip_citations_from_trajectory(
     shadow = json.loads(trajectory_path.read_text(encoding="utf-8"))
     shadow_msgs = shadow["messages"]
     shadow_args = json.loads(
-        (shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"].get("arguments") or "{}")
+        shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"].get("arguments") or "{}"
     )
     shadow_args["reasoning"] = extract.stripped_reasoning or ""
     shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"]["arguments"] = json.dumps(shadow_args)

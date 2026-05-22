@@ -1,4 +1,4 @@
-"""Create-time cosine-block dedup against the per-task retrieved subset."""
+"""Create-time cosine-block dedup against existing bullets."""
 
 from __future__ import annotations
 

@@ -65,6 +65,30 @@ def test_apply_create_commits() -> None:
     assert len(store.bullets) == 1
 
 
+def test_apply_create_dedups_against_active_store_not_only_retrieved() -> None:
+    store = TraceLedger(domain="Law")
+    store.add(
+        section="S",
+        content="existing",
+        source_problem="P",
+        content_embedding=[1.0, 1.0],
+        source_problem_embedding=[0.0, 1.0],
+        created=1,
+    )
+    ops = [CuratedOp(op="CREATE", section="S2", content="duplicate", source_problem="P2")]
+    stats = apply_ops(
+        store=store,
+        ops=ops,
+        retrieved=[],
+        embed=_Embed(),
+        cfg=TraceConfig(enabled=True),
+        current_ordinal=2,
+    )
+    assert stats.create_blocked == 1
+    assert stats.create_committed == 0
+    assert len(store.bullets) == 1
+
+
 def test_apply_consolidate_sums_counters() -> None:
     store = TraceLedger(domain="Law")
     b1 = store.add(

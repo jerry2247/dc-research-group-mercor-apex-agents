@@ -1149,6 +1149,10 @@ def run_single_task(
                 task.domain, cited=cited_bullet_ids, gt_correct=gt_correct
             )
             ordinal = trace_runtime.current_ordinal_for(task.domain)
+            # Persist the citation counter update even if the downstream
+            # reflector/curator call fails. A successful curator pass writes
+            # the same snapshot index again with the final edits applied.
+            trace_runtime.persist(task.domain)
             try:
                 traj_json = json.loads(trajectory_path.read_text(encoding="utf-8"))
             except Exception as exc:

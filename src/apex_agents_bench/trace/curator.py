@@ -165,9 +165,12 @@ def apply_ops(
             stats.skipped_invalid_bullet_id += 1
             continue
         cand_emb, src_emb = embs[0], embs[1]
+        dedup_candidates = [
+            b for b in store.active_bullets() if b.bullet_id not in set(o.bullet_ids)
+        ]
         blocked, _m, _by = is_too_similar_to_retrieved(
             candidate_embedding=cand_emb,
-            retrieved=retrieved,
+            retrieved=dedup_candidates,
             threshold=cfg.create_time_similarity_threshold,
         )
         if blocked:
@@ -216,7 +219,7 @@ def apply_ops(
         cand_emb, src_emb = embs[0], embs[1]
         blocked, _m, _by = is_too_similar_to_retrieved(
             candidate_embedding=cand_emb,
-            retrieved=retrieved,
+            retrieved=store.active_bullets(),
             threshold=cfg.create_time_similarity_threshold,
         )
         if blocked:

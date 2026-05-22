@@ -31,7 +31,7 @@ class TraceRuntime:
         run_dir: Path,
         completed_per_domain: dict[str, int] | None = None,
         embed: EmbeddingClient | None = None,
-    ) -> "TraceRuntime":
+    ) -> TraceRuntime:
         """Build a runtime, pre-loading the latest snapshot for every domain that
         already has a snapshot directory on disk.
 

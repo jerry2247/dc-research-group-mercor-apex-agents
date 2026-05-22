@@ -36,7 +36,7 @@ class TraceConfig:
     enabled: bool = False
     embedding_model: str = "text-embedding-3-large"
     embedding_dim: int = 3072
-    top_k_per_axis: int = 5
+    top_k_per_axis: int = 8
 
     # Reflector + curator both run on the agent profile's model. The
     # runner fills these in from the active AgentProfile before the
@@ -47,8 +47,8 @@ class TraceConfig:
 
     reflector_temperature: float = 1.0
     curator_temperature: float = 1.0
-    reflector_max_tokens: int = 16_000
-    curator_max_tokens: int = 16_000
+    reflector_max_tokens: int = 24_000
+    curator_max_tokens: int = 24_000
     reflector_timeout_seconds: int = 1800
     curator_timeout_seconds: int = 1800
 
@@ -59,4 +59,4 @@ class TraceConfig:
     # Trajectory-render cap for the agentic-trajectory transcript. Tool-
     # call arguments and assistant reasoning are NOT truncated; only
     # long tool-result bodies are.
-    trajectory_max_chars_per_tool_result: int = 4000
+    trajectory_max_chars_per_tool_result: int = 8000

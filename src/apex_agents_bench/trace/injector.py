@@ -30,7 +30,7 @@ def _truncate_bullet_content(content: str, cap: int) -> str:
     return head + f"\n\n[... {len(content) - len(head):,} more chars in full bullet]"
 
 
-def render_bullets_block(bullets: list[Bullet], *, max_chars_per_bullet: int = 3000) -> str:
+def render_bullets_block(bullets: list[Bullet], *, max_chars_per_bullet: int = 6000) -> str:
     if not bullets:
         return "(no relevant strategy bullets yet)\n"
     parts: list[str] = []

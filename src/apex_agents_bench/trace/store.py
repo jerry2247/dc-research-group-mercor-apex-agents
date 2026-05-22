@@ -25,7 +25,7 @@ class SnapshotStore:
     domain_dir: Path
 
     @classmethod
-    def for_domain(cls, run_dir: Path, domain: str) -> "SnapshotStore":
+    def for_domain(cls, run_dir: Path, domain: str) -> SnapshotStore:
         d = run_dir / "trace" / domain
         d.mkdir(parents=True, exist_ok=True)
         return cls(domain_dir=d)
