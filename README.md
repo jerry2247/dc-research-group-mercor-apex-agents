@@ -35,7 +35,7 @@ On the only configuration that has been run end-to-end at the time of writing �
 | Baseline (no memory) | 0 / 11 | 0.000 |
 | + Dynamic Ledger | **1 / 11** | **0.190** |
 
-Full per-domain × per-method table (with placeholders for Law, Management Consulting, and the TRACE row across all three domains), per-task breakdown, and a worked example of a Dynamic Ledger entry that converted a 0 → 1.00 score on a downstream task: [`results.md`](results.md).
+Full per-domain × per-method table (with placeholders for Law, Management Consulting, and the TRACE row across all three domains), per-task breakdown, and a worked example of a Dynamic Ledger entry that converted a 0 → 1.00 score on a downstream task: [`results.md`](results.md). Pre-registered rollout order for the remaining (domain, world, method) cells: [`docs/EVALUATION_PLAN.md`](docs/EVALUATION_PLAN.md).
 
 ## Reproduce
 

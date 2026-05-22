@@ -6,6 +6,7 @@ to find the doc that answers your question.
 | Doc | Length | Read if you want to answer… |
 |---|---|---|
 | [`README.md`](../README.md) | long | "how do I run the benchmark?" |
+| [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md) | medium | "which world should I run next? what's the rollout order?" |
 | [`../results.md`](../results.md) | medium | "what numbers do we have so far?" |
 | [`DYNAMIC_LEDGER_PRD.md`](DYNAMIC_LEDGER_PRD.md) | long | "how does `--dynamic-ledger` actually work?" |
 | [`TRACE_PRD.md`](TRACE_PRD.md) | long | "how does `--trace` actually work?" |
