@@ -49,18 +49,23 @@ class SnapshotStore:
         idx = max(idxs)
         return idx, TraceLedger.model_validate_json(self.snapshot_path(idx).read_text(encoding="utf-8"))
 
-    def load_for_resume(
-        self, *, max_index_allowed: int, domain: str
-    ) -> tuple[int, TraceLedger]:
+    def load_for_resume(self, *, domain: str) -> tuple[int, TraceLedger]:
+        """Load the highest snapshot on disk for this domain.
+
+        Returns ``(0, empty-store)`` when no snapshots exist. The snapshot
+        store is the source of truth for cheatsheet state; the results CSV
+        is only the source of truth for which tasks have been completed.
+        Loading the latest snapshot ensures curator emissions from
+        agent-failed tasks are preserved across resumes.
+        """
         candidates: list[int] = []
         for f in self.domain_dir.iterdir():
             m = _SNAPSHOT_RE.match(f.name)
             if m:
                 candidates.append(int(m.group(1)))
-        in_bound = [i for i in candidates if i <= max_index_allowed]
-        if not in_bound:
+        if not candidates:
             return 0, TraceLedger(domain=domain)
-        idx = max(in_bound)
+        idx = max(candidates)
         store = TraceLedger.model_validate_json(
             self.snapshot_path(idx).read_text(encoding="utf-8")
         )

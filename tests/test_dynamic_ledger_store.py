@@ -29,18 +29,25 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert loaded.active_entries()[0].content == "hello"
 
 
-def test_load_for_resume_caps_at_completed_csv_rows(tmp_path: Path) -> None:
+def test_load_for_resume_loads_latest_snapshot_on_disk(tmp_path: Path) -> None:
+    """``load_for_resume`` must always return the highest snapshot index on disk.
+
+    Snapshots may legitimately exist beyond the CSV's completed-row count
+    when the curator emits ops on an agent-failed task (the snapshot is
+    saved but no CSV row is written). The snapshot store is the source of
+    truth for cheatsheet state; this test pins that contract.
+    """
     ss = SnapshotStore.for_domain(tmp_path, "Law")
     ss.save(_store("t1"), index=1)
     ss.save(_store("t2"), index=2)
-    ss.save(_store("t3-ahead"), index=3)
-    idx, store = ss.load_for_resume(max_index_allowed=2, domain="Law")
-    assert idx == 2
-    assert store.active_entries()[0].content == "t2"
+    ss.save(_store("t3-from-failed-task"), index=3)
+    idx, store = ss.load_for_resume(domain="Law")
+    assert idx == 3
+    assert store.active_entries()[0].content == "t3-from-failed-task"
 
 
 def test_resume_empty_returns_fresh_store(tmp_path: Path) -> None:
     ss = SnapshotStore.for_domain(tmp_path, "Management Consulting")
-    idx, store = ss.load_for_resume(max_index_allowed=0, domain="Management Consulting")
+    idx, store = ss.load_for_resume(domain="Management Consulting")
     assert idx == 0
     assert store.active_entries() == []

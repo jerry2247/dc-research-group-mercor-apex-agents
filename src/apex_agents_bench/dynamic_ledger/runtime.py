@@ -32,18 +32,33 @@ class DynamicLedgerRuntime:
         *,
         cfg: DynamicLedgerConfig,
         run_dir: Path,
-        completed_per_domain: dict[str, int],
+        completed_per_domain: dict[str, int] | None = None,
         embed: EmbeddingClient | None = None,
     ) -> DynamicLedgerRuntime:
+        """Build a runtime, pre-loading the latest snapshot for every domain that
+        already has a snapshot directory on disk.
+
+        ``completed_per_domain`` is accepted for backward compatibility with the
+        runner's resume bookkeeping but is intentionally NOT used to gate which
+        snapshot loads: the snapshot store is the source of truth for ledger
+        state, the CSV is only the source of truth for which task_ids have been
+        completed (and the runner uses the CSV separately to skip already-run
+        tasks). Loading the latest snapshot regardless of the CSV count means
+        curator emissions from agent-failed tasks are preserved across resumes.
+        """
         if embed is None:
             embed = LiteLLMEmbeddingClient(model=cfg.embedding_model)
         rt = cls(cfg=cfg, run_dir=run_dir, embed=embed)
-        for domain, n_completed in completed_per_domain.items():
-            ss = SnapshotStore.for_domain(run_dir, domain)
-            rt.snapshot_stores[domain] = ss
-            index, loaded = ss.load_for_resume(max_index_allowed=n_completed, domain=domain)
-            rt.stores[domain] = loaded
-            rt.next_ordinal[domain] = index
+        # Pre-warm: scan disk for any per-domain snapshot directory and load the
+        # latest snapshot from each. Domains that have a snapshot directory but
+        # no completed CSV rows (every task failed before grading) are still
+        # discovered here so their ledgers persist.
+        dl_root = run_dir / "dynamic_ledger"
+        if dl_root.is_dir():
+            for sub in dl_root.iterdir():
+                if not sub.is_dir():
+                    continue
+                rt.store_for(sub.name)
         return rt
 
     def store_for(self, domain: str) -> DynamicLedger:

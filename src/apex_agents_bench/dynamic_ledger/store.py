@@ -80,12 +80,22 @@ class SnapshotStore:
             return None
         return i, store
 
-    def load_for_resume(self, *, max_index_allowed: int, domain: str) -> tuple[int, DynamicLedger]:
+    def load_for_resume(self, *, domain: str) -> tuple[int, DynamicLedger]:
+        """Load the highest snapshot on disk for this domain.
+
+        Returns ``(0, empty-store)`` when no snapshots exist. The
+        snapshot store is the source of truth for ledger state; the
+        results CSV is only the source of truth for which tasks have
+        been completed. They diverge legitimately whenever the curator
+        emits ops on a task whose agent ultimately failed (the curator
+        still runs, the snapshot is saved, but no CSV row is written).
+        Loading the latest snapshot ensures no curator emission is ever
+        silently dropped on resume.
+        """
         for i in reversed(self.list_snapshot_indices()):
-            if i <= max_index_allowed:
-                loaded = self.load(i)
-                if loaded is not None:
-                    return i, loaded
+            loaded = self.load(i)
+            if loaded is not None:
+                return i, loaded
         return 0, DynamicLedger(domain=domain)
 
     def append_curator_log(self, record: dict) -> None:

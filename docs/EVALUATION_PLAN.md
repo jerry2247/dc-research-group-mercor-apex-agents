@@ -67,7 +67,7 @@ Each method has a single CSV per repo. Continuing extends that CSV; per-domain l
 apex-agents-bench run --model grok-4.3-high \
     --world world_43a921f91f0f4d2c85d8bd2774f9e681 \
     --dynamic-ledger \
-    --output runs/ib-world219-grok43high-dl/results.csv
+    --output runs/grok43high-dl/results.csv
 ```
 
 **Next IB world (baseline):**
@@ -75,10 +75,10 @@ apex-agents-bench run --model grok-4.3-high \
 ```bash
 apex-agents-bench run --model grok-4.3-high \
     --world world_43a921f91f0f4d2c85d8bd2774f9e681 \
-    --output runs/ib-world219-grok43high/results.csv
+    --output runs/grok43high-baseline/results.csv
 ```
 
-When all IB worlds are complete, start Law from `world_06051b9b…` against a new CSV (e.g. `runs/law-grok43high-dl/results.csv`); a new per-domain ledger begins from empty.
+When all IB worlds are complete, the same Dynamic Ledger CSV (`runs/grok43high-dl/results.csv`) is reused for Law (starting from `world_06051b9b…`) and then Management Consulting. The per-domain ledger trees (`dynamic_ledger/Investment Banking/`, `dynamic_ledger/Law/`, `dynamic_ledger/Management Consulting/`) are isolated by construction — each domain's cheatsheet starts empty when that domain's first world runs, and grows monotonically across that domain's worlds.
 
 ## Pre-registered, not post-hoc
 

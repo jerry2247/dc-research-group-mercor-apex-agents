@@ -165,9 +165,23 @@ never cross-domain.
 
 After each task in domain D, the runner saves
 `snapshot_<ordinal>.json` and appends one line to `curator_log.jsonl`
-with op counts, token usage, and wall time. On resume, the runtime
-loads `snapshot_<max_completed>.json` so the in-flight ledger is
-exactly what it would have been at that point.
+with op counts, token usage, and wall time. The snapshot ordinal is
+the monotonic count of curator calls in that domain, regardless of
+whether the underlying task produced a graded CSV row.
+
+**Resume contract.** The snapshot store is the source of truth for
+ledger state; the results CSV is only the source of truth for which
+task_ids have been completed. On resume, the runtime loads the
+**latest** snapshot on disk for each domain — not the snapshot at the
+CSV-completed-row count. The two counts diverge whenever the curator
+emits ops on a task whose agent ultimately failed (the curator-always
+policy means the curator still runs on the failed trajectory, the
+snapshot is written, but the runner records no CSV row). Loading the
+latest snapshot ensures those entries are never silently dropped on
+resume.
+
+Pinned by the load-bearing fidelity test
+`tests/test_dynamic_ledger_store.py::test_load_for_resume_loads_latest_snapshot_on_disk`.
 
 ## CSV columns added when the Ledger is on
 

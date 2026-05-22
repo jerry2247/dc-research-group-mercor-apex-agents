@@ -46,11 +46,11 @@ cd apex-agents-bench && pip install -e . && cp .env.example .env  # add API keys
 
 # Baseline (no memory)
 apex-agents-bench run --model grok-4.3-high --world 219 \
-    --output runs/ib-world219-grok43high/results.csv
+    --output runs/grok43high-baseline/results.csv
 
 # Dynamic Ledger
 apex-agents-bench run --model grok-4.3-high --world 219 --dynamic-ledger \
-    --output runs/ib-world219-grok43high-dl/results.csv
+    --output runs/grok43high-dl/results.csv
 ```
 
 Full setup (venv, API keys, Docker pre-warm, dataset hashes) and the documented divergences from Mercor's published harness: [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md), [`docs/AUDIT.md`](docs/AUDIT.md), [`docs/DOCKER.md`](docs/DOCKER.md).
@@ -64,8 +64,8 @@ Full setup (venv, API keys, Docker pre-warm, dataset hashes) and the documented 
 | `src/apex_agents_bench/trace/` | TRACE subsystem: reflector, curator, citations parser, prompts |
 | `vendor/archipelago/` | Mercor's agentic harness, vendored at `3f4a8234`, with two documented patches |
 | `data/apex-agents/` | Mercor's benchmark dataset, fetched from `mercor/APEX-Agents` |
-| `runs/ib-world219-grok43high/` | Baseline run, grok-4.3-high, Investment Banking world 219 |
-| `runs/ib-world219-grok43high-dl/` | Dynamic Ledger run, same profile, same subset |
+| `runs/grok43high-baseline/` | Baseline run, grok-4.3-high, Investment Banking world 219 |
+| `runs/grok43high-dl/` | Dynamic Ledger run, same profile, same subset |
 | `docs/` | Architecture, PRDs, reproducibility, audit, Docker. Index: [`docs/INDEX.md`](docs/INDEX.md) |
 
 Behavioral fidelity to Mercor's published evaluation surface is enforced by pytest assertions and a code-level audit; see [`docs/AUDIT.md`](docs/AUDIT.md).
