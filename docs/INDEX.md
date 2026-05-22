@@ -6,10 +6,13 @@ to find the doc that answers your question.
 | Doc | Length | Read if you want to answer… |
 |---|---|---|
 | [`README.md`](../README.md) | long | "how do I run the benchmark?" |
+| [`../results.md`](../results.md) | medium | "what numbers do we have so far?" |
+| [`DYNAMIC_LEDGER_PRD.md`](DYNAMIC_LEDGER_PRD.md) | long | "how does `--dynamic-ledger` actually work?" |
+| [`TRACE_PRD.md`](TRACE_PRD.md) | long | "how does `--trace` actually work?" |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | medium | "why is this in src/ and that in vendor/?" |
 | [`AUDIT.md`](AUDIT.md) | long | "are we really running Mercor's harness?" |
 | [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) | medium | "why one run per task? why gpt-5.5?" |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | medium | "what's the phased roadmap, including DC?" |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | medium | "what's the phased roadmap?" |
 | [`HARNESS_NOTES.md`](HARNESS_NOTES.md) | medium | "how does Archipelago actually work under the hood?" |
 | [`BENCHMARK_STRUCTURE.md`](BENCHMARK_STRUCTURE.md) | medium | "what's actually in the 480 tasks?" |
 | [`COST.md`](COST.md) | short | "what will this cost?" |

@@ -2,8 +2,8 @@
 
 Test-time learning subsystem layered on the Mercor / Archipelago
 ReAct-toolbelt harness. Implements the **Dynamic Ledger** approach
-from the **Dynamic Cheatsheet 2.0** codebase (Jerry Gu, Shurui Liu,
-Sabrina Yen-Ko; mentor: Mirac Suzgun) — adapted to a multi-turn
+from the **Dynamic Cheatsheet 2.0** codebase (Jerry Gu, Sabrina Yen-Ko,
+Shurui Liu; mentor: Mirac Suzgun) — adapted to a multi-turn
 tool-using agent on a rubric-graded benchmark. The Ledger has **no
 ground-truth signal** at any point — the curator never sees the
 criterion text, never sees the judge's per-criterion verdict, never
@@ -192,29 +192,43 @@ trajectory_chars_seen_by_curator
 **No** GT-related columns. **No** criteria-related columns. **No**
 citation-related columns.
 
-## Curator-side principles
+## Curator prompt design
 
-The curator system prompt asks for a *senior reviewer*: critically
-diagnose what the colleague did well vs. thinly, prescribe domain
-standard practice when it is clear, hedge with conditions when it
-genuinely isn't. Five hard rules:
+The curator system prompt frames the ledger as a **reference cheatsheet**
+— a passive document of formulas, conventions, definitions,
+tool-environment facts, and pitfall flags that a future practitioner
+consults the way an analyst consults a clipped formula sheet. Entries
+are reference content, not procedures. Because the curator sees the full
+agent trajectory (every tool call, every tool result, every recovery
+pattern), entries on this benchmark cover both substantive lessons
+(formulas, conventions, definitions) and tool-environment facts (e.g.
+sandbox properties, schema-validation quirks, first-attempt argument
+choices).
 
-1. **R1** — Workflows + critical diagnosis, not outcomes. Embed
-   literal code / tool-call shapes; show failing AND succeeding
-   argument forms.
-2. **R2** — Ground in concrete examples from the trajectory. Values
-   in entries are illustrative; the injection block explicitly tells
-   the next agent not to copy specific numbers, paths, or names.
-3. **R3** — Prescribe standard practice when it is clear; hedge with
-   conditions when it isn't.
-4. **R4** — Extract substantive domain insights, not just process.
-5. **R5** — Capture the micro-details that break practitioners.
+The exact prompt is in
+[`src/apex_agents_bench/dynamic_ledger/prompts/curator_system.txt`](../src/apex_agents_bench/dynamic_ledger/prompts/curator_system.txt).
+Every entry the curator emits must satisfy six properties:
 
-Two entry shapes: elaborate playbook entries (multi-paragraph
-workflows, no length cap) and focused action notes (one tight
-paragraph for a narrow lesson). The default behavior is two-to-four
-ops per session; zero ops are allowed when the
-existing playbook already covers everything observed.
+- **S1** — reference content, not an instruction (formula, definition,
+  convention, documented tool-environment fact, or pitfall flag — not a
+  procedure or step list).
+- **S2** — self-contained; readable without seeing the source
+  trajectory.
+- **S3** — reusable on structurally distinct future cases; no
+  case-specific numbers, file paths, or named entities. Tool names
+  themselves are fine to keep — they are part of the surface.
+- **S4** — domain-specific insight, not generic advice.
+- **S5** — short and dense (a tight paragraph; never a multi-section
+  workflow).
+- **S6** — `section` and `source_problem` name the *class* of case that
+  should trigger retrieval, precisely enough to be retrievable.
+
+Default behavior is zero, one, or two ops per session. The
+generator-side injection block (
+[`src/apex_agents_bench/dynamic_ledger/prompts/generator_injection_block.txt`](../src/apex_agents_bench/dynamic_ledger/prompts/generator_injection_block.txt)
+) frames the retrieved entries as a formula sheet the agent may consult
+but never follows; the agent's own analysis and tool usage remain
+authoritative.
 
 ## Tests
 
@@ -257,7 +271,7 @@ The **Dynamic Ledger** method itself — itemised strategy memory with
 typed `CREATE` / `UPDATE` / `DELETE` operations, dual-axis
 (strategy + source-problem) embedding retrieval, and a create-time
 similarity filter — is introduced in the **Dynamic Cheatsheet 2.0**
-codebase by **Jerry Gu, Shurui Liu, and Sabrina Yen-Ko** (Stanford
+codebase by **Jerry Gu, Sabrina Yen-Ko, and Shurui Liu** (Stanford
 SAIL; mentor: Mirac Suzgun). It is one of three memory architectures
 studied in DC2 alongside the Dynamic Cheatsheet variants (Suzgun et
 al., 2025) and ACE (Zhang et al., 2025).
@@ -267,12 +281,34 @@ The reference implementation lives at
 the DC2 codebase.
 
 ```bibtex
-@misc{gu_liu_yang_2025_dynamic_ledger,
-  title   = {Dynamic Ledger: itemised, dual-indexed strategy memory},
-  author  = {Gu, Jerry and Liu, Shurui and Yen-Ko, Sabrina},
-  note    = {Stanford SAIL; introduced in the Dynamic Cheatsheet 2.0
-             codebase. Mentor: Mirac Suzgun},
-  year    = {2025}
+@misc{gu_yenko_liu_2026_dynamic_ledger,
+  title  = {Dynamic Ledger: Retrieval-Augmented Structured Memory for
+            Test-Time Learning},
+  author = {Gu, Jerry and Yen-Ko, Sabrina and Liu, Shurui},
+  note   = {Mentor: Mirac Suzgun},
+  year   = {2026}
+}
+
+@misc{suzgun_yuksekgonul_bianchi_jurafsky_zou_2025_dynamic_cheatsheet,
+  title  = {Dynamic Cheatsheet: Test-Time Learning with Adaptive Memory},
+  author = {Suzgun, Mirac and Yuksekgonul, Mert and Bianchi, Federico and
+            Jurafsky, Dan and Zou, James},
+  year   = {2025},
+  eprint = {2504.07952},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url    = {https://arxiv.org/abs/2504.07952}
+}
+
+@misc{suzgun_kalai_2024_meta_prompting,
+  title  = {Meta-Prompting: Enhancing Language Models with Task-Agnostic
+            Scaffolding},
+  author = {Suzgun, Mirac and Kalai, Adam Tauman},
+  year   = {2024},
+  eprint = {2401.12954},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url    = {https://arxiv.org/abs/2401.12954}
 }
 ```
 
@@ -285,10 +321,11 @@ on content and source-problem embeddings, create-time cosine
 similarity gate (0.85) against the retrieved subset. The
 adaptations to this benchmark are scoped:
 
-- **Curator prompt content** — critical-diagnosis / 5-rule (R1-R5)
-  framing replaces the DC2 prompt body. The output contract is
-  unchanged (same `<memory_updates>` block, same three ops; any op
-  outside `{CREATE, UPDATE, DELETE}` the curator's wider prompt
+- **Curator prompt content** — a reference-cheatsheet framing with the
+  six properties (S1–S6) listed above replaces the DC2 prompt body. The
+  output contract is unchanged (same `<memory_updates>` block, same
+  three ops; any op outside `{CREATE, UPDATE, DELETE}` the curator's
+  wider prompt
   describes is silently dropped by the parser).
 - **Per-domain ledger** — one ledger per APEX-Agents domain
   (Investment Banking / Law / Management Consulting); DC2 uses one

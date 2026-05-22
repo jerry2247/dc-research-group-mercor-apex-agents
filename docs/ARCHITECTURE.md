@@ -8,7 +8,7 @@
 
 ```
 apex-agents-bench/
-├── src/apex_agents_bench/        <- WRAPPER. Owned by us. NeurIPS-quality.
+├── src/apex_agents_bench/        <- harness (policy, runner, audit, CSV schema)
 │   ├── cli.py                       Typer CLI
 │   ├── config.py                    Policy constants + Settings
 │   ├── paths.py                     Repo + vendor path resolution

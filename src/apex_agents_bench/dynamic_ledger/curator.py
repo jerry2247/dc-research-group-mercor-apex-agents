@@ -41,12 +41,11 @@ def user_template_text() -> str:
 
 VALID_OPS = ("CREATE", "UPDATE", "DELETE")
 """The three item-level operations defined in the Dynamic Ledger
-approach in the Dynamic Cheatsheet 2.0 codebase (Jerry / Shurui /
-Sabrina Yen-Ko; mentor: Mirac Suzgun). No CONSOLIDATE and no NO_OP — neither
-exists in the DL approach. The wrapper's `<memory_updates>` parser
-silently drops any op outside this set, so the curator can still emit
-the literal NO_OP / CONSOLIDATE strings described in the prompt
-without poisoning the ledger."""
+approach (Jerry Gu, Sabrina Yen-Ko, Shurui Liu; mentor: Mirac Suzgun).
+No CONSOLIDATE and no NO_OP — neither exists in the DL approach. The
+wrapper's `<memory_updates>` parser silently drops any op outside this
+set, so the curator can still emit the literal NO_OP / CONSOLIDATE
+strings described in the prompt without poisoning the ledger."""
 
 
 @dataclass
