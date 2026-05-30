@@ -1,0 +1,113 @@
+## Reusable Code and Tool-Call Snippets
+<memory_item>
+<description>
+To extract specific text from a PDF (such as statute sections or legal provisions), first call pdf_server_pdf with action="search" using the key term or citation as query (case-insensitive), then follow with action="read_pages" on the returned page number(s). Use max_results=5 and context_chars=100 for search.
+</description>
+<example>
+pdf_server_pdf({"request":{"action":"search","file_path":"/Reorganization/State Statutes/<STATE>/<pdfname>.pdf","query":"194A.713","case_sensitive":false,"max_results":5,"context_chars":100}})
+</example>
+</memory_item>
+<memory_item>
+<description>
+To read multi-page .docx agreements, call docs_server_docs with action="read_content" and page_index (starting at 0) to retrieve paragraphs sequentially; repeat for additional pages as needed. Paths must start with / and end with .docx.
+</description>
+<example>
+docs_server_docs({"request":{"action":"read_content","file_path":"/Magnolia Documents/Contracts/<agreement>.docx","page_index":0}})
+</example>
+</memory_item>
+<memory_item>
+<description>
+To create a new .docx document (e.g., a legal memorandum or analysis), call docs_server_docs with action="create", specifying directory (folder path) and file_name (ending with .docx) separately, along with content as an array of valid content blocks (each object must have a "type" field such as "heading" or "paragraph" with required fields populated; empty objects or incorrect parameter names like file_path will fail validation).
+</description>
+<example>
+docs_server_docs({"request":{"action":"create","directory":"/Litigation Strategy/Wrongful Death Documents/Tom Buchanan","file_name":"Memo.docx","content":[{"type":"heading","text":"Title","level":1},{"type":"paragraph","text":"Body text here."}]}})
+</example>
+</memory_item>
+
+## Solution Strategies for Recurring Task Shapes
+<memory_item>
+<description>
+For compliance reviews of assisted living residency agreements against state statutes, first locate and extract the exact statutory requirement(s) from the state PDF, then read the target agreement document(s) page-by-page, and compare each enumerated statutory element against the agreement language for presence or omission. When multiple similar agreement files exist, select the most general or state-matched version rather than a state-specific variant.
+</description>
+<example>
+Locate statute PDF → search/read target section → read agreement → map each statutory item (e.g., notice periods, fee provisions) to agreement text.
+</example>
+</memory_item>
+<memory_item>
+<description>
+For evaluating a motion for summary judgment on a wrongful death claim, locate the complaint and moving party's supporting affidavit, then review opposing evidence such as a deposition to determine whether it raises a genuine issue of material fact on key elements (duty, breach, causation). If factual disputes exist on those elements, the motion is likely denied.
+</description>
+<example>
+Locate complaint and affidavit in litigation folder → read deposition of key witness (e.g., on care protocols) → compare evidence for triable issues under civil procedure rules.
+</example>
+</memory_item>
+
+## Formulas, Definitions, and Conventions
+<memory_item>
+<description>
+KRS 194A.713(7) and analogous state provisions require a minimum 30-day notice for fee structure changes in assisted living lease agreements; absence of any such notice language constitutes non-compliance.
+</description>
+<example>
+Statutory element (7): "Minimum thirty (30) day notice provision for a change in the community's fee structure."
+</example>
+</memory_item>
+
+## Environment and Sandbox Facts
+<memory_item>
+<description>
+State statutes for assisted living compliance are stored under /Reorganization/State Statutes/<STATE ABBREV>/ as PDFs (e.g., 194A_700-7205.pdf for Kentucky). Use filesystem_server_list_files or get_directory_tree on /Reorganization/State Statutes/ to discover available states.
+</description>
+<example>
+/Reorganization/State Statutes/KY/ contains 194A_700-7205.pdf and Regs 902 KAR 20 480.pdf
+</example>
+</memory_item>
+<memory_item>
+<description>
+Magnolia-specific agreements reside in /Magnolia Documents/Contracts/; files include General Resident Agreement Template.docx and state-variant versions (e.g., Gardens Residency Agreement Martin Miller v1.docx for California).
+</description>
+<example>
+filesystem_server_list_files({"path":"/Magnolia Documents/Contracts"})
+</example>
+</memory_item>
+<memory_item>
+<description>
+Litigation-related documents, including complaints, strategies, and case files for wrongful death, breach of contract, and assisted living matters, are stored under /Litigation Strategy/ with subfolders such as Assisted Living Litigation in General/ (containing PDFs), Breach of Contract Documents/ (containing complaints and related files), and Wrongful Death Documents/. Use filesystem_server_list_files or get_directory_tree on /Litigation Strategy/ to discover available files.
+</description>
+<example>
+/Litigation Strategy/ contains Assisted Living Litigation in General/, Breach of Contract Documents/, and Wrongful Death Documents/
+</example>
+</memory_item>
+<memory_item>
+<description>
+Breach of contract complaints and related filings are stored under /Litigation Strategy/Breach of Contract Documents/ with possible subfolders such as Complaints/. Use filesystem_server_list_files on that path to locate original, first amended, and second amended versions.
+</description>
+<example>
+filesystem_server_list_files({"path":"/Litigation Strategy/Breach of Contract Documents"})
+</example>
+</memory_item>
+<memory_item>
+<description>
+Case-specific wrongful death files (complaints, incident reports, depositions, affidavits, medical logs) are located in subfolders under /Litigation Strategy/Wrongful Death Documents/<resident or case name e.g. Tom Buchanan>/. List files there to find documents like Wrongful Death Complaint.docx or deposition transcripts.
+</description>
+<example>
+filesystem_server_list_files({"path":"/Litigation Strategy/Wrongful Death Documents/Tom Buchanan"})
+</example>
+</memory_item>
+
+## Pitfalls, Edge Cases, and Verification Checks
+<memory_item>
+<description>
+When multiple residency agreement files exist, verify the selected file matches the task scope (general template vs. state-specific or resident-specific version) before comparison; California RCFE forms may contain 60-day notice language that satisfies a 30-day minimum but is irrelevant to other states.
+</description>
+<example>
+Confirm agreement file name and content scope before mapping to statute (e.g., avoid using CA-specific form for KY compliance check).
+</example>
+</memory_item>
+<memory_item>
+<description>
+When creating new .docx files with docs_server_docs action="create", the content parameter must be a list of valid block objects (each with a "type" field such as "heading" or "paragraph"); passing empty objects, empty lists, or structures missing the type tag causes repeated validation errors. Always specify directory and file_name separately.
+</description>
+<example>
+Use content=[{"type":"heading","text":"Title","level":1},{"type":"paragraph","text":"Body text."}] ; do not pass {} or invalid tags.
+</example>
+</memory_item>

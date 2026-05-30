@@ -1,0 +1,83 @@
+## Reusable Code and Tool-Call Snippets
+<memory_item>
+<description>
+To explore and load data from .xlsx files, first use sheets_server_sheets with action "list_tabs" on the file_path to identify worksheets and their indices, then use action "read_tab" with tab_index, max_rows (e.g., 30-50), and compact=true to retrieve structured data without full file load.
+</description>
+<example>
+sheets_server_sheets({"request":{"action":"list_tabs","file_path":"<path_to_xlsx>"}})
+sheets_server_sheets({"request":{"action":"read_tab","file_path":"<path_to_xlsx>","tab_index":0,"max_rows":30,"compact":true}})
+</example>
+</memory_item>
+<memory_item>
+<description>
+Use filesystem_server_list_files with recursive path navigation starting from "/" to discover folders and files (e.g., Research, Client Data Room, .xlsx, .docx, .png), then apply filesystem_server_read_image_file for PNG files containing tables or charts.
+</description>
+<example>
+filesystem_server_list_files({"path":"/3. Research/Competitor Pricing and Packaging Research"})
+filesystem_server_read_image_file({"file_path":"<path_to_png>"})
+</example>
+</memory_item>
+<memory_item>
+<description>
+For multi-step analysis, initialize and update progress with todo_write using a list of objects each having id, status ("in_progress", "pending", "completed"), and content; merge=true on updates to track tasks like data loading, parsing, calculation, and verification.
+</description>
+<example>
+todo_write({"todos":[{"id":"1","status":"in_progress","content":"Discover and load data files"},{"id":"2","status":"pending","content":"Parse segment/tier data and apply formulas"}],"merge":false})
+</example>
+</memory_item>
+
+## Solution Strategies for Recurring Task Shapes
+<memory_item>
+<description>
+For target-setting or forecasting tasks involving segments/tiers (e.g., Upper Mid-Market, Enterprise) and metrics like revenue share, win rate, or multipliers: (1) locate and read transaction or pricing sheets; (2) filter to "Won" deals only for the named segment/sector; (3) compute aggregates like total realized revenue or average deal size; (4) apply target share/multiplier to derive implied volume or pipeline; (5) round per task rules (whole numbers for counts, nearest dollar for currency) before final delivery as plain text message.
+</description>
+<example>
+Filter Won deals in segment X; total_realized = sum(revenue); implied_deals = (target_share * total_realized) / avg_expansion_deal_size; required_pipeline = target_ARR / win_rate.
+</example>
+</memory_item>
+
+## Formulas, Definitions, and Conventions
+<memory_item>
+<description>
+Optimal price = minimum_price * (1 + optimal_multiplier) where optimal_multiplier is the decimal form of the percentage points above minimum (e.g., 0.10 for 10%). Annual revenue per tier/segment = optimal_price * volume. Total forecast revenue in $m = sum(annual_revenue) / 1_000_000, rounded to 1 decimal.
+</description>
+<example>
+revenue_m = (min_price * (1 + mult) * volume) / 1000000
+</example>
+</memory_item>
+<memory_item>
+<description>
+Implied deal volume for expansion target = (target_expansion_share * segment_total_realized_revenue_from_Won_deals) / average_size_of_Upper_Mid-Market_Won_expansion_deal. Required pipeline capacity = target_ARR / Target_Win_Rate where target_ARR equals sum of Won deals in the named sector/segment.
+</description>
+<example>
+implied_volume = (share * total_Won_revenue) / avg_deal_size; pipeline = target_ARR / win_rate
+</example>
+</memory_item>
+
+## Environment and Sandbox Facts
+<memory_item>
+<description>
+sheets_server_sheets supports actions "list_tabs" (returns worksheet names and indices) and "read_tab" (returns raw_output as CSV-like text). filesystem_server tools handle directory listing, file metadata, and image reading (base64 PNGs may embed tables). code_execution_server_code_exec executes the "code" value as Python; provide direct statements without shell wrappers.
+</description>
+<example>
+Use list_tabs then read_tab on .xlsx in Client Data Room or Research folders; read_image_file on .png for multipliers or subscriber data.
+</example>
+</memory_item>
+
+## Pitfalls, Edge Cases, and Verification Checks
+<memory_item>
+<description>
+code_execution_server_code_exec calls fail with shell syntax errors or "python: not found" if the code string uses shell constructs (e.g., python -c, unescaped quotes, or newlines passed to sh). Provide only raw Python code (use ; for multiple statements if needed) and test simple expressions first.
+</description>
+<example>
+Correct: {"request":{"code":"print(720 * 1.1 * 100000 / 1000000)"}} — avoid wrapping in python -c or shell syntax.
+</example>
+</memory_item>
+<memory_item>
+<description>
+After calculations, verify rounding matches task (nearest whole number for counts/deals, nearest dollar for currency) and that filters are applied only to "Won" deals before aggregating revenue or averages; confirm final output is delivered as plain-text message rather than internal state.
+</description>
+<example>
+confirm value is rounded_to_nearest_whole(deals) and currency_to_nearest_dollar(ARR); deliver as text message.
+</example>
+</memory_item>

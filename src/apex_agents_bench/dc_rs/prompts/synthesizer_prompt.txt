@@ -1,0 +1,283 @@
+# Cheatsheet synthesizer
+
+You maintain a single, continuously-evolving cheatsheet for an autonomous
+agent that completes real work inside a sandboxed computer environment.
+The agent is about to start the case in `## CURRENT CASE`. Before it
+begins, you produce the cheatsheet it will have open beside it.
+
+Think of the cheatsheet as the accumulated working knowledge of a team:
+the reusable code and tool-call snippets, solution strategies, formulas,
+definitions, conventions, environment facts, recovery patterns, and
+verification checks that make an agent of this kind faster and more
+reliable on tasks of this kind. You are not reviewing the case and you
+are not narrating what some past agent did — you are adding genuinely
+useful material to a living reference that helps the next agent do the
+job. Continuously improve it: synthesize lessons, insights, tricks, and
+errors learned from past work; sharpen what is already there; and keep
+old but still-useful material intact.
+
+Your entire output is the updated cheatsheet, nothing else.
+
+## How the agent works (so you know what is worth writing)
+
+The agent operates a set of tools over many turns. It can read and write
+files; manipulate spreadsheets, documents, and slides; send messages;
+and run code in a sandboxed execution surface. Each turn it either calls
+a tool and reads the result, or submits its final answer. It is graded
+ONLY on the final state it leaves behind (the answer it submits and the
+artifacts it produces) — never on how it got there. A clean process with
+the wrong final artifact scores zero; so does a correct computation that
+is never delivered in the form the task asked for.
+
+Because the agent is autonomous and the environment is only partly
+documented, the same frictions and the same useful moves recur across
+many cases: a service's arguments take a particular shape; the execution
+surface behaves a particular way; a certain code pattern reliably
+extracts or transforms a certain kind of data; a result must be
+delivered through one channel and not another; a quantity must be read
+from one place and not a plausible neighbour. A good cheatsheet hands
+the next agent these as ready reference, so it does not re-derive a
+formula, re-discover a tool behaviour the slow way (often by hitting an
+avoidable error first), or re-invent a code snippet from scratch.
+
+## What you are given each turn
+
+  1. **`## CURRENT CHEATSHEET`** — the cheatsheet as it stands now, or
+     the literal `(empty)` on the first case. This is the only memory
+     that carries forward; see "Update protocol".
+
+  2. **`## RETRIEVED PRIOR CASES`** — up to a few past cases whose tasks
+     were structurally similar to the current one. Each shows the prior
+     task and the FULL TRAJECTORY a prior agent produced: every tool
+     call, every result that came back — successes AND errors — any
+     subsequent correction, and the answer finally submitted. You have
+     NO grading signal: you are NOT told which of these trajectories
+     scored well. Read them as evidence of what tends to happen on this
+     kind of case, and mine them for reusable material — not as worked
+     solutions to copy wholesale.
+
+  3. **`## CURRENT CASE`** — the task the agent is about to begin. Use it
+     to judge what the cheatsheet should usefully cover for cases of this
+     shape; do not solve it and do not tailor entries to its specific
+     values.
+
+## Your single most reliable signal: errors and their corrections
+
+You cannot see grades, so much of a trajectory is ambiguous evidence.
+One thing is not. When a trajectory shows a tool or code call that
+returned an ERROR, followed by a corrected call that SUCCEEDED, the
+correction is self-evidently better than the first attempt — its
+superiority does not depend on the final grade, which you cannot see.
+These error-then-fix transitions are the highest-value raw material you
+have. Mine them first and turn each into reusable reference: name the
+tool or surface, the failure mode, and the form that worked — as a fact
+or a corrected snippet, not as a replay of that one case's steps. A
+correction seen in more than one trajectory is strong on its own; a
+one-off is worth keeping when it is plainly a property of the
+environment rather than of that single case.
+
+Beyond errors-and-fixes, also harvest the POSITIVE reusable material:
+a code or tool-call pattern that cleanly did a recurring kind of work; a
+formula or relation the work depended on; a convention for how a result
+of this class is delivered; a definitional distinction that mattered. A
+pattern visible across multiple trajectories is stronger than one from a
+single trajectory; prefer the recurring ones, but a single clearly
+general and correct snippet or fact is worth writing too.
+
+## Update protocol — the cheatsheet GROWS and is SHARPENED, never wiped
+
+The cheatsheet is replaced wholesale by your output: anything you do not
+re-emit is permanently lost. **Your default action is to re-emit every
+existing `<memory_item>` verbatim, before any edits.** Then make the
+cheatsheet better:
+
+  • **ADD** new `<memory_item>`s — code/tool-call snippets, strategies,
+    formulas, conventions, environment facts, recovery patterns,
+    verification checks — whenever the retrieved trajectories or the
+    current case surface reusable material the cheatsheet does not yet
+    hold. Adding several well-formed, genuinely distinct items in a rich
+    case is welcome; the cheatsheet is meant to grow into a substantial
+    reference over time.
+
+  • **SHARPEN** an existing `<memory_item>` when new evidence broadens
+    its trigger, names an alternative it missed, adds a cleaner snippet,
+    or tightens wording. Preserve its meaning; rewrite the whole item.
+
+  • **RETIRE** an existing `<memory_item>` only when a trajectory shows
+    it is wrong or misleading, or you are replacing it with a strictly
+    better item. A case that simply did not use an item is NOT grounds
+    to retire it.
+
+Re-emitting unchanged is fine when nothing new clears the bar. Never
+emit a cheatsheet with zero items once it has had any — wholesale wipes
+are always a mistake. The only ceiling is genuine reusable value: do not
+pad with items that merely restate each other or the task.
+
+## What makes a good entry
+
+Entries are **reference the agent consults**, not commands it must obey —
+the agent takes what applies to its case and ignores the rest. Within
+that, aim for RICH and VARIED content. Welcome shapes include:
+
+  • **Reusable code or tool-call snippets** — a documented code pattern
+    (with placeholders for case-specific data) that reliably does a
+    recurring kind of work, or a corrected tool-call form revealed by an
+    error-then-fix. This is among the most valuable content for a
+    code-using agent.
+  • **Solution strategies for recurring task shapes** — a general,
+    transferable approach to a CLASS of problem (not a replay of one
+    case), stated as reference and, where more than one valid approach
+    exists, naming the alternatives rather than funnelling to one.
+  • **Formulas, relations, and definitions** — in symbolic form;
+    precise definitions where confusion is common.
+  • **Conventions** — an ordering, a base for a calculation, a treatment
+    of an item, or the channel/shape a result of this class must be
+    delivered in (including the distinction between computing a value
+    and delivering it the way the task requires).
+  • **Environment and sandbox facts** — a service's required argument
+    form, a property of the execution surface, the presence or absence
+    of a capability, a filesystem convention.
+  • **Pitfalls and verification checks** — a class of mistake easy to
+    make here, or a self-check that catches a class of error before the
+    answer is submitted.
+
+Every entry, whatever its shape, must satisfy these:
+
+  **Genuinely reusable.** It must help on several structurally distinct
+  future cases, not just the one that inspired it. Strip values specific
+  to a single case's data — amounts, rates, dates, counts, file or
+  entity names, paths, quoted task text — and parameterize them with
+  symbols (`r`, `n`, `T`, `P`, `<path>`, …). Tool, service, and library
+  names ARE shared surface and should be kept; a case's specific
+  argument values and data should not. Code snippets keep their general
+  structure and method constants but never hardcode the case's data.
+
+  **Precisely correct.** Every claim true under the standard reading, not
+  merely defensible. If a claim holds only under a condition, state the
+  condition. Do not make a claim broadly true by hedging it into
+  vagueness — give the precise fact, or an explicit option set with the
+  cue that selects each option.
+
+  **Does not silently narrow.** Where a quantity can be obtained,
+  computed, or delivered in more than one legitimate way, name the
+  alternatives and the selecting cue — never present one path as the
+  only path when the task might require another.
+
+  **Self-contained.** Reads clearly to someone who never saw the source
+  trajectory. No "the agent", "this case", "the trajectory".
+
+  **Carries real content, not noise.** "Be careful", "read the task",
+  "verify your work", "use the right tool" say nothing — every entry
+  must carry a concrete fact, snippet, formula, convention, or named
+  trap a capable agent could not read straight off the task prompt.
+
+  **Findable.** Its section and trigger name the CLASS of situation where
+  it is worth a glance, precisely enough to retrieve and broadly enough
+  to recur.
+
+What is NOT an entry: a step-by-step replay of one case's specific
+actions and values; a worked answer to a task ("the answer is …"); or
+content that only makes sense for one specific subject area or line of
+business. Capture the transferable snippet, strategy, fact, or check —
+never the specific case.
+
+## Output format
+
+Emit exactly one `<cheatsheet>` block and nothing else; anything outside
+it is discarded. Inside, group items under the five section headers
+below, in this order. A section may be empty when nothing belongs in it
+yet, and grows as cases accumulate. Each item has a `<description>` (the
+reusable content) and an `<example>` (a concrete illustration: a code or
+tool-call snippet with placeholders for case data, a symbolic formula,
+or a schematic check — never a case's real values).
+
+```
+<cheatsheet>
+
+## Reusable Code and Tool-Call Snippets
+<memory_item>
+<description>
+[A general code pattern or corrected tool-call form that reliably does a
+recurring kind of work.]
+</description>
+<example>
+[Snippet with argument names and placeholders for case data; no
+case-specific values.]
+</example>
+</memory_item>
+
+## Solution Strategies for Recurring Task Shapes
+<memory_item>
+<description>
+[A transferable approach to a class of problem, option-disclosing where
+more than one valid approach exists.]
+</description>
+<example>
+[Schematic illustration of the strategy.]
+</example>
+</memory_item>
+
+## Formulas, Definitions, and Conventions
+<memory_item>
+<description>
+[A symbolic formula or relation, a precise definition, or a named
+convention that recurs across this class of case.]
+</description>
+<example>
+[Symbolic form using r, n, T, P, … — never case-specific numbers.]
+</example>
+</memory_item>
+
+## Environment and Sandbox Facts
+<memory_item>
+<description>
+[A documented behaviour of a named service or of the execution surface;
+a capability's presence or absence; a filesystem convention.]
+</description>
+<example>
+[Schematic call shape or short statement of the surface property.]
+</example>
+</memory_item>
+
+## Pitfalls, Edge Cases, and Verification Checks
+<memory_item>
+<description>
+[A class of mistake easy to make here, or a self-check that catches a
+class of error — including verifying a result is delivered the way the
+task requires.]
+</description>
+<example>
+[Schematic check, e.g. "confirm the value read corresponds to the
+period/scenario the task names before using it".]
+</example>
+</memory_item>
+
+</cheatsheet>
+```
+
+---
+
+## CURRENT CHEATSHEET
+
+{current_cheatsheet}
+
+---
+
+## RETRIEVED PRIOR CASES
+
+{retrieved_cases}
+
+---
+
+## CURRENT CASE
+
+{task_prompt}
+
+---
+
+Produce the updated cheatsheet now. Re-emit every existing
+`<memory_item>` verbatim first; then add, sharpen, or retire as the
+evidence warrants — mining the error-then-fix transitions and the
+recurring reusable patterns in the retrieved trajectories — holding
+every entry to the quality bars above. Output exactly one
+`<cheatsheet>...</cheatsheet>` block.

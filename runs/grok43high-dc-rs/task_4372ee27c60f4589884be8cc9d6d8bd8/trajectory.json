@@ -1,0 +1,1019 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an AI assistant that completes tasks by reasoning and using tools.\n\n## Think Before Acting\n\nBefore making tool calls, briefly explain your reasoning in 1-3 sentences:\n- What you learned from the previous step\n- What you're doing next and why\n\nDon't over-explain. Be concise but show your thinking.\n\n## Tools\n\n**Always Available (Meta-Tools):**\n- `todo_write` - Task planning: create/update todos. Takes `todos` array [{id, content, status}] and `merge` boolean.\n- `toolbelt_list_tools` / `toolbelt_inspect_tool` / `toolbelt_add_tool` / `toolbelt_remove_tool` - Tool management\n- `final_answer` - Submit your answer (status: completed/blocked/failed)\n\n**Domain Tools:** Use `toolbelt_list_tools` to discover, then `toolbelt_add_tool` to add them.\n\n## Workflow\n\n1. Plan: Use `todo_write` to create todos for complex tasks\n2. Discover: Use `toolbelt_list_tools` to find relevant tools\n3. Execute: Work through todos, use `todo_write` with `merge=true` to update status\n4. Complete: Call `final_answer` (all todos must be completed/cancelled first)\n\n## Rules\n\n- Update todo status with `todo_write`: set `in_progress` when starting, `completed` when done\n- Show your work for calculations\n- `final_answer` is rejected if todos are incomplete\n"
+    },
+    {
+      "role": "user",
+      "content": "## Reference cheatsheet — formulas, conventions, environment facts, pitfalls\n\nThe block below is a **reference cheatsheet** — like a formula sheet and\na page of environment notes clipped to your desk. It collects reusable\nformulas, definitions, conventions, documented behaviours of the tools\nand execution surface, output-delivery conventions, and pitfall flags\nthat earlier agents working structurally similar cases found worth\nwriting down.\n\n**This is reference material, not instructions.** Treat it the way you'd\ntreat a formula sheet and a notes page during an exam:\n\n  • You do not \"follow\" a cheatsheet. You consult it when you need a\n    specific fact, and otherwise ignore it.\n  • Entries are passive reminders, not rules. None of them command you\n    to do anything, and none of them describe the steps for this case.\n  • Your own reading of the current task is authoritative. If an entry\n    suggests a formula, convention, tool-argument form, or delivery\n    channel that conflicts with what this task asks for, follow the\n    task.\n  • Many entries will be irrelevant to this case. That is expected for a\n    cheatsheet. Skip them without comment.\n  • Do not change a value, formula, methodology, tool-call shape,\n    precision, or delivery form you have arrived at independently just\n    because an entry mentions something different. Entries describe what\n    was useful on *other* cases.\n\nThe cheatsheet exists only to spare you from re-deriving a useful\nformula, to remind you of a tool or environment behaviour you might\notherwise re-discover the slow way (for example by hitting an avoidable\nerror first), or to flag a known trap. Work the current case as you\nnormally would. Do not cite, quote, or mention the cheatsheet in your\nanswer or your reasoning.\n\n## Reusable Code and Tool-Call Snippets\n<memory_item>\n<description>\nTo explore and load data from .xlsx files, first use sheets_server_sheets with action \"list_tabs\" on the file_path to identify worksheets and their indices, then use action \"read_tab\" with tab_index, max_rows (e.g., 30-50), and compact=true to retrieve structured data without full file load.\n</description>\n<example>\nsheets_server_sheets({\"request\":{\"action\":\"list_tabs\",\"file_path\":\"<path_to_xlsx>\"}})\nsheets_server_sheets({\"request\":{\"action\":\"read_tab\",\"file_path\":\"<path_to_xlsx>\",\"tab_index\":0,\"max_rows\":30,\"compact\":true}})\n</example>\n</memory_item>\n<memory_item>\n<description>\nUse filesystem_server_list_files with recursive path navigation starting from \"/\" to discover folders and files (e.g., Research, Client Data Room, .xlsx, .docx, .png), then apply filesystem_server_read_image_file for PNG files containing tables or charts.\n</description>\n<example>\nfilesystem_server_list_files({\"path\":\"/3. Research/Competitor Pricing and Packaging Research\"})\nfilesystem_server_read_image_file({\"file_path\":\"<path_to_png>\"})\n</example>\n</memory_item>\n<memory_item>\n<description>\nFor multi-step analysis, initialize and update progress with todo_write using a list of objects each having id, status (\"in_progress\", \"pending\", \"completed\"), and content; merge=true on updates to track tasks like data loading, parsing, calculation, and verification.\n</description>\n<example>\ntodo_write({\"todos\":[{\"id\":\"1\",\"status\":\"in_progress\",\"content\":\"Discover and load data files\"},{\"id\":\"2\",\"status\":\"pending\",\"content\":\"Parse segment/tier data and apply formulas\"}],\"merge\":false})\n</memory_item>\n<memory_item>\n<description>\nFor survey data analysis, load xlsx with pandas, filter by priority criteria (e.g., AI capabilities as top priority), compute mean and standard deviation of efficiency score column for full and filtered datasets.\n</description>\n<example>\nimport pandas as pd\ndf = pd.read_excel('<path_to_survey_xlsx>')\nmean_all = df['Efficiency_Score'].mean()\nmean_filtered = df[df['Priority'] == 'AI capabilities']['Efficiency_Score'].mean()\nstd = df['Efficiency_Score'].std()\nfraction = abs(mean_all - mean_filtered) / std\n</example>\n</memory_item>\n<memory_item>\n<description>\nWhen pandas or openpyxl are unavailable in code_execution_server_code_exec, fall back to sheets_server_sheets read_tab (with cell_range for large files) to extract per-tier aggregates such as lost CV, retained ARR, and competitor names from WinLoss and Churn logs; parse CSV-like raw_output with csv module if needed.\n</description>\n<example>\nsheets_server_sheets({\"request\":{\"action\":\"read_tab\",\"file_path\":\"<churn_or_winloss_xlsx>\",\"tab_index\":0,\"cell_range\":\"A1:P50\",\"compact\":true}})\n</memory_item>\n\n## Solution Strategies for Recurring Task Shapes\n<memory_item>\n<description>\nFor target-setting or forecasting tasks involving segments/tiers (e.g., Upper Mid-Market, Enterprise) and metrics like revenue share, win rate, or multipliers: (1) locate and read transaction or pricing sheets; (2) filter to \"Won\" deals only for the named segment/sector; (3) compute aggregates like total realized revenue or average deal size; (4) apply target share/multiplier to derive implied volume or pipeline; (5) round per task rules (whole numbers for counts, nearest dollar for currency) before final delivery as plain text message.\n</description>\n<example>\nFilter Won deals in segment X; total_realized = sum(revenue); implied_deals = (target_share * total_realized) / avg_expansion_deal_size; required_pipeline = target_ARR / win_rate.\n</memory_item>\n<memory_item>\n<description>\nFor ranking or scoring tasks with multiple criteria (e.g., policy violations, deal types, approval levels): (1) locate the relevant log/data file; (2) aggregate per-entity metrics (counts exceeding thresholds by type); (3) rank and assign scores 1–4 (extreme values get 1 or 4); (4) assign identical scores on ties; (5) apply tiebreaker (e.g., secondary count) if totals match; (6) sum scores, rank entities, and deliver findings as plain-text message after rounding scores to whole numbers.\n</description>\n<example>\nAggregate per approver: violation_count, negotiation_excess, pilot_excess, cfo_within; rank and score; total = sum(scores); rank by total, tiebreak by cfo_count.\n</memory_item>\n<memory_item>\n<description>\nFor survey data tasks involving efficiency scores and priority filters: (1) locate and read the survey xlsx file; (2) compute overall mean and std of efficiency; (3) filter to subset where AI capabilities ranked top priority; (4) compute subset mean; (5) calculate |overall_mean - subset_mean| / std as fraction of std dev; (6) round to 4 decimal places before delivery as plain text.\n</description>\n<example>\nmean_all, std, mean_ai = compute_means_and_std(df); fraction = abs(mean_all - mean_ai) / std; round to 4 decimals.\n</memory_item>\n<memory_item>\n<description>\nFor discount analysis tasks on specific tiers from approval logs: (1) locate and read the discount approval logs xlsx; (2) aggregate discount % and policy threshold per named tier (filter rows by tier); (3) compute average discount and average threshold per tier; (4) calculate % variance as (avg_discount - avg_threshold) / avg_threshold; (5) round results to 0.01% and deliver as plain-text message.\n</description>\n<example>\nPer tier: avg_disc = mean(discounts); avg_thresh = mean(thresholds); variance = (avg_disc - avg_thresh) / avg_thresh * 100; round to 0.01%.\n</memory_item>\n<memory_item>\n<description>\nFor tier-level competitive pressure and severity scoring tasks using WinLoss and churn data: (1) locate churn and winloss xlsx files; (2) aggregate per pricing tier: total CV of lost deals, retained renewal ARR, competitor names in lost deals, original ARR, churn rate; (3) compute competitor loss ratio; (4) apply conditional adjustments (increase churned ARR 15% if lost CV > retained; reduce lost CV 50% if retained > lost); (5) derive severity score, exposure multiplier, and sensitivity factor per tier; (6) identify highest-severity tier, its top competitor (alpha-first on ties), and compute required ratios/factors; deliver as plain-text message after rounding to 2 decimals.\n</description>\n<example>\nPer tier: loss_ratio = lost_CV / total_CV; apply adjustment condition; severity = adj_pressure + (adj_churn * (adj_lost / orig_ARR)); multiplier = max_severity / adj_pressure; factor = max_severity * (adj_pressure + adj_churn); rank tiers by severity.\n</memory_item>\n<memory_item>\n<description>\nFor policy breach stress index tasks using discount approval logs and KPI charts: (1) locate the discount approval logs xlsx; (2) filter to deals where Final_Approved_Discount_% > Policy_Threshold_%; (3) compute Policy Breach % = Final_Approved_Discount_% - Policy_Threshold_%; (4) classify severity using the KPI chart; (5) apply risk sensitivity factor; (6) compute revenue exposure per deal; (7) calculate the stress index as average revenue at risk per breaching deal; round to 2 decimal places before delivery as plain-text message.\n</description>\n<example>\nFilter breaching deals; breach_pct = approved - threshold; severity = chart_lookup(breach_pct); exposure = revenue * sensitivity(severity); index = mean(exposures); round to 2 decimals.\n</memory_item>\n<memory_item>\n<description>\nFor churn/ARR proportion reduction tasks using discount approval logs and customer segmentation data: (1) locate discount approval logs xlsx and customer segmentation xlsx; (2) aggregate per Pricing_Tier: Overall_ARR (from discount) and Churned_ARR (from segmentation); (3) compute current proportion = Churned_ARR / Overall_ARR; (4) for tiers where proportion > 0.5%, required_reduction = Churned_ARR - (0.005 * Overall_ARR); (5) compute avg_ARR_per_deal from discount data; (6) additional_deals = ceil(total_reduction / avg_ARR_per_deal); deliver results as plain-text message after rounding dollars to nearest whole and deals up.\n</description>\n<example>\nPer tier: proportion = churned / overall; if >0.005: reduction = churned - (0.005*overall); deals = ceil(total_reduction / avg_deal); round dollars, ceil deals.\n</memory_item>\n\n## Formulas, Definitions, and Conventions\n<memory_item>\n<description>\nOptimal price = minimum_price * (1 + optimal_multiplier) where optimal_multiplier is the decimal form of the percentage points above minimum (e.g., 0.10 for 10%). Annual revenue per tier/segment = optimal_price * volume. Total forecast revenue in $m = sum(annual_revenue) / 1_000_000, rounded to 1 decimal.\n</description>\n<example>\nrevenue_m = (min_price * (1 + mult) * volume) / 1000000\n</memory_item>\n<memory_item>\n<description>\nImplied deal volume for expansion target = (target_expansion_share * segment_total_realized_revenue_from_Won_deals) / average_size_of_Upper_Mid-Market_Won_expansion_deal. Required pipeline capacity = target_ARR / Target_Win_Rate where target_ARR equals sum of Won deals in the named sector/segment.\n</description>\n<example>\nimplied_volume = (share * total_Won_revenue) / avg_deal_size; pipeline = target_ARR / win_rate\n</memory_item>\n<memory_item>\n<description>\nFor multi-criteria ranking/scoring: rank entities by each metric (descending or ascending per rule), assign scores 1–4 with extremes at 1 or 4 and middle ranks 2–3; identical metrics receive identical scores. Tiebreaker on total: use secondary metric (e.g., Director-level count). Round final scores to nearest whole number.\n</description>\n<example>\nrank_by_metric(M); score = 1 for top/bottom, 4 for opposite; total = sum(scores); tiebreak_total by Director_count.\n</memory_item>\n<memory_item>\n<description>\nFraction of standard deviation = |mean_all - mean_filtered| / std_dev where mean_filtered is mean for users with AI priority as top.\n</description>\n<example>\nfraction = |mean_all - mean_ai| / std\n</memory_item>\n<memory_item>\n<description>\n% variance from policy threshold = ((avg_discount - avg_policy_threshold) / avg_policy_threshold) * 100, rounded to nearest 0.01%. When user count is required, compute midpoint of company size range (e.g., for \"50-250M\" range use (50 + 250) / 2).\n</description>\n<example>\nvariance = ((mean_disc - mean_thresh) / mean_thresh) * 100; midpoint = (low + high) / 2\n</memory_item>\n<memory_item>\n<description>\nCompetitor Loss Ratio = (Total Contract Value of Lost deals / Total Contract Value of all deals). Adjustment rule: if competitor-lost deal value > retained renewal ARR for tier then increase churned ARR by 15%; else reduce competitor-lost contract value by 50%. Severity Score = Adjusted Competitor Pressure + (Adjusted Churn Rate × (Adjusted Competitor Lost Value / Original ARR)). Competitive Exposure Multiplier = Highest Severity Score / Adjusted Competitor Pressure of that tier. Scenario Sensitivity Factor = Highest Severity Score × (Adjusted Competitor Pressure + Adjusted Churn Rate). Round all final numeric outputs to 2 decimal places.\n</description>\n<example>\nloss_ratio = lost_CV / total_CV; if lost_CV > retained_ARR: churned_ARR *= 1.15 else: lost_CV *= 0.5; severity = adj_pressure + (adj_churn * (adj_lost / orig_ARR)); multiplier = max_severity / tier_pressure; factor = max_severity * (tier_pressure + tier_churn)\n</memory_item>\n<memory_item>\n<description>\nPolicy Breach % = Final_Approved_Discount_% - Policy_Threshold_%. Policy Breach Stress Index = average revenue at risk across all policy-breaching deals.\n</description>\n<example>\nbreach = approved - threshold; index = avg(revenue_at_risk for breaching deals)\n</memory_item>\n<memory_item>\n<description>\nFor churn/ARR proportion reduction: required ARR reduction to reach 0.5% threshold = Churned_ARR - (0.005 * Overall_ARR) per tier (only for tiers where current proportion > 0.5%). Number of additional deals = ceil(total_reduction_across_tiers / avg_ARR_per_deal). Round dollars to nearest whole; round deals upward.\n</description>\n<example>\nreduction = churned - (0.005 * overall); deals = ceil(total_reduction / avg_deal); round(dollars), ceil(deals)\n</memory_item>\n\n## Environment and Sandbox Facts\n<memory_item>\n<description>\nsheets_server_sheets supports actions \"list_tabs\" (returns worksheet names and indices) and \"read_tab\" (returns raw_output as CSV-like text). filesystem_server tools handle directory listing, file metadata, and image reading (base64 PNGs may embed tables). code_execution_server_code_exec executes the \"code\" value as Python; provide direct statements without shell wrappers.\n</description>\n<example>\nUse list_tabs then read_tab on .xlsx in Client Data Room or Research folders; read_image_file on .png for multipliers or subscriber data.\n</memory_item>\n<memory_item>\n<description>\nFor large .xlsx files, read_tab may require multiple calls using cell_range parameter (e.g., \"A1:L100\", \"A101:L200\") to retrieve data in batches when row limits apply.\n</description>\n<example>\nsheets_server_sheets({\"request\":{\"action\":\"read_tab\",\"file_path\":\"<path>\",\"tab_index\":0,\"cell_range\":\"A1:L100\",\"compact\":true}})\n</memory_item>\n<memory_item>\n<description>\nChurn data files are located at /5. Client Data Room/05 Renewal and churn data (logo churn, revenue churn, reasons)/Brightpath_Renewal_Churn_v1.0.xlsx; WinLoss data at /5. Client Data Room/04 Win-loss deal analysis (with reason codes)/Brightpath_WinLoss_Analysis_v1.0.xlsx. Use sheets_server_sheets to read and aggregate per Pricing_Tier columns including ARR, Churn_Risk_Flag, Renewal_Status, Competitor names.\n</description>\n<example>\nsheets_server_sheets({\"request\":{\"action\":\"read_tab\",\"file_path\":\"/5. Client Data Room/05 Renewal and churn data (logo churn, revenue churn, reasons)/Brightpath_Renewal_Churn_v1.0.xlsx\",\"tab_index\":0,\"max_rows\":100,\"compact\":true}})\n</memory_item>\n<memory_item>\n<description>\nDiscount approval logs are at /5. Client Data Room/03 Discount rate logs & approval workflow records/Brightpath_Discount_Approval_Logs_v1.0.xlsx; customer segmentation at /5. Client Data Room/08 Customer segmentation data (SMB - Mid-market - Enterprise - Industry)/Brightpath_Customer_Segmentation_v1.0.xlsx. Aggregate per Pricing_Tier from discount (ARR) and segmentation (Churned_ARR, ARR) for proportion calculations.\n</description>\n<example>\nsheets_server_sheets({\"request\":{\"action\":\"read_tab\",\"file_path\":\"/5. Client Data Room/03 Discount rate logs & approval workflow records/Brightpath_Discount_Approval_Logs_v1.0.xlsx\",\"tab_index\":0,\"max_rows\":100,\"compact\":true}})\n</memory_item>\n\n## Pitfalls, Edge Cases, and Verification Checks\n<memory_item>\n<description>\ncode_execution_server_code_exec calls fail with shell syntax errors or \"python: not found\" if the code string uses shell constructs (e.g., python -c, unescaped quotes, or newlines passed to sh). Provide only raw Python code (use ; for multiple statements if needed) and test simple expressions first.\n</description>\n<example>\nCorrect: {\"request\":{\"code\":\"print(720 * 1.1 * 100000 / 1000000)\"}} — avoid wrapping in python -c or shell syntax.\n</memory_item>\n<memory_item>\n<description>\nAfter calculations, verify rounding matches task (nearest whole number for counts/deals, nearest dollar for currency) and that filters are applied only to \"Won\" deals before aggregating revenue or averages; confirm final output is delivered as plain-text message rather than internal state.\n</description>\n<example>\nconfirm value is rounded_to_nearest_whole(deals) and currency_to_nearest_dollar(ARR); deliver as text message.\n</memory_item>\n<memory_item>\n<description>\nFor survey data, ensure correct filter on priority column before computing means and std; round final fraction and scores to 4 decimal places.\n</description>\n<example>\nconfirm filter matches task priority cue; round(fraction, 4).\n</memory_item>\n<memory_item>\n<description>\nWhen processing discount logs for tiers, confirm exact tier name matches (e.g., \"Business\", \"Growth\") and apply midpoint calculation to company size ranges only when task explicitly requires user count proxy; verify variance uses relative formula before rounding.\n</description>\n<example>\nconfirm tier == \"Business\" or \"Growth\"; variance = ((avg_disc - avg_thresh) / avg_thresh) * 100; round both to 0.01.\n</memory_item>\n<memory_item>\n<description>\nBefore computing severity score, explicitly verify the conditional adjustment rule (lost CV vs retained ARR) has been applied correctly per tier; for the highest-severity tier, extract the most frequent competitor from lost deals (break ties by alphabetical order of competitor name); confirm all ratios and factors use the adjusted (post-rule) values and are rounded to exactly 2 decimal places before final message delivery.\n</description>\n<example>\nconfirm adjustment applied (if lost_CV > retained: churn *=1.15); top_competitor = min(frequent_competitors) on tie; ratio = severity / adj_churn; round(severity, 2)\n</memory_item>\n<memory_item>\n<description>\nWhen computing policy breach stress index, ensure only positive breach deals are included; confirm revenue figure is the appropriate one for \"at risk\" calculation; verify severity classification matches the chart scale before applying sensitivity.\n</description>\n<example>\nconfirm breach > 0; use correct revenue column; match chart for severity.\n</memory_item>\n<memory_item>\n<description>\nFor churn/ARR proportion tasks, confirm exact Pricing_Tier name matches between discount approval and segmentation files before aggregating; verify only tiers with proportion > 0.5% receive reduction calculation; confirm avg_ARR_per_deal uses discount approval ARR values; round dollars to nearest whole and deals upward before delivery.\n</description>\n<example>\nconfirm tier names match; reduction only if proportion > 0.005; deals = ceil(total_reduction / avg); round(dollars), ceil(deals)\n</memory_item>\n\n---\nUse the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.\n\n1) What is the Seat Purchased Surplus (Actual Seats minus Target Seats) for the Medium utilization band in the Enterprise tier?\n2) What is the difference in percentage points between the Target High (>80%) share for the Business tier and the Actual share?\n\nPlease provide both answers as a reply here, rounded to the nearest whole number."
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{}",
+            "name": "toolbelt_list_tools"
+          },
+          "id": "call-78d5bea9-a22b-4153-b7d4-626b38eaca60-0",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "The task is: \"Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "The task is: \"Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.\n"
+      }
+    },
+    {
+      "content": "[\"calendar_server_calendar\", \"calendar_server_calendar_schema\", \"chat_server_chat\", \"chat_server_chat_schema\", \"code_execution_server_code_exec\", \"docs_server_docs\", \"docs_server_docs_schema\", \"filesystem_server_get_directory_tree\", \"filesystem_server_get_file_metadata\", \"filesystem_server_list_files\", \"filesystem_server_read_image_file\", \"filesystem_server_read_text_file\", \"filesystem_server_search_files\", \"mail_server_mail\", \"mail_server_mail_schema\", \"pdf_server_pdf\", \"pdf_server_pdf_schema\", \"sheets_server_sheets\", \"sheets_server_sheets_schema\", \"slides_server_slides\", \"slides_server_slides_schema\"]",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-78d5bea9-a22b-4153-b7d4-626b38eaca60-0",
+      "name": "toolbelt_list_tools"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"tool_name\":\"filesystem_server_list_files\"}",
+            "name": "toolbelt_add_tool"
+          },
+          "id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-1",
+          "type": "function"
+        },
+        {
+          "function": {
+            "arguments": "{\"tool_name\":\"filesystem_server_search_files\"}",
+            "name": "toolbelt_add_tool"
+          },
+          "id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-2",
+          "type": "function"
+        },
+        {
+          "function": {
+            "arguments": "{\"tool_name\":\"sheets_server_sheets\"}",
+            "name": "toolbelt_add_tool"
+          },
+          "id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-3",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "The tools include filesystem_server_list_files, sheets_server_sheets, etc. I need to add the relevant ones to my toolbelt.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "The tools include filesystem_server_list_files, sheets_server_sheets, etc. I need to add the relevant ones to my toolbelt.\n"
+      }
+    },
+    {
+      "content": "{\"success\": true, \"toolbelt_size\": 1}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-1",
+      "name": "toolbelt_add_tool"
+    },
+    {
+      "content": "{\"success\": true, \"toolbelt_size\": 2}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-2",
+      "name": "toolbelt_add_tool"
+    },
+    {
+      "content": "{\"success\": true, \"toolbelt_size\": 3}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-6586faad-e1c1-4184-b4e1-01c7643b24d1-3",
+      "name": "toolbelt_add_tool"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"path\":\"/\"}",
+            "name": "filesystem_server_list_files"
+          },
+          "id": "call-613fb080-2945-48ec-b9c1-762fb14dba59-4",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Tools added. Now, explore the filesystem to find data files.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Tools added. Now, explore the filesystem to find data files.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "'Targeted seat share.pdf' (application/pdf file) 57925 bytes\n'3. Research' (folder)\n'1. Analysis' (folder)\n'5. Client Data Room' (folder)\n'4. References' (folder)\n'2. Presentation' (folder)\n'0. General and Administration' (folder)\n"
+        }
+      ],
+      "tool_call_id": "call-613fb080-2945-48ec-b9c1-762fb14dba59-4"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"pattern\":\"*seat*\",\"path\":\"/\",\"recursive\":true}",
+            "name": "filesystem_server_search_files"
+          },
+          "id": "call-01cc6512-0293-4f02-8ba7-be35b7158b7e-5",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "There's a PDF: 'Targeted seat share.pdf', and folders like 3. Research, 5. Client Data Room, etc. Probably data in Client Data Room or Research.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "There's a PDF: 'Targeted seat share.pdf', and folders like 3. Research, 5. Client Data Room, etc. Probably data in Client Data Room or Research.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "Found 1 file(s) matching '*seat*':\n/Targeted seat share.pdf"
+        }
+      ],
+      "tool_call_id": "call-01cc6512-0293-4f02-8ba7-be35b7158b7e-5"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"pattern\":\"*.xlsx\",\"path\":\"/\",\"recursive\":true}",
+            "name": "filesystem_server_search_files"
+          },
+          "id": "call-8dcd4d05-1306-4e94-807a-e9055a676f07-6",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Only the PDF. Try broader search.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Only the PDF. Try broader search."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "Found 39 file(s) matching '*.xlsx':\n/3. Research/Survey Research/Survey Results/Willingess-to-Pay Analysis_v1.xlsx\n/3. Research/Survey Research/Survey Results/Willingess-to-Pay Analysis_v2.xlsx\n/3. Research/Survey Research/Survey Results/Considered Expensive WTP by Customer.xlsx\n/3. Research/Survey Research/Survey Results/Survey Response Data.xlsx\n/3. Research/Survey Research/Survey Results/Willingess-to-Pay Analysis_vFinal.xlsx\n/3. Research/Survey Research/Survey Results/Acceptable WTP by Customer.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Market Opportunity.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Discounting Practices.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Competition Analysis_v2.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Competition Analysis_v1.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Bundling Strategies.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Customer Segmentation.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Competitions Price Benchmarking.xlsx\n/3. Research/Competitor Pricing and Packaging Research/Competitors Pricing Model.xlsx\n/5. Client Data Room/02 Deal-level transaction data (contract value, tier, discounts, ACV-ARR)/Brightpath_Deals_RawDump_v0.2_updates.xlsx\n/5. Client Data Room/02 Deal-level transaction data (contract value, tier, discounts, ACV-ARR)/Brightpath_Deal_Transactions_v1.0.xlsx\n/5. Client Data Room/02 Deal-level transaction data (contract value, tier, discounts, ACV-ARR)/Brightpath_DealTransactions_v0.1_RAW(original).xlsx\n/5. Client Data Room/06 Net Revenue Retention (NRR) and ARR by pricing tier/Brightpath_NRR_ARR_by_Tier_v1.0.xlsx\n/5. Client Data Room/06 Net Revenue Retention (NRR) and ARR by pricing tier/Brightpath_NRR_ARR_CORRECTED_vFinal.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Revenue_by_Segment.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Product_Roadmap.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Revenue_Expansion_Upsell.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Historical_Pricing_Versions_ChangeLog.xlsx\n/5. Client Data Room/09 Optional datasets/Brightpath_Customer_Firmographic_Profiles.xlsx\n/5. Client Data Room/03 Discount rate logs & approval workflow records/Brightpath_Discount_Approval_Logs_v1.0.xlsx\n/5. Client Data Room/03 Discount rate logs & approval workflow records/Brightpath_Discount_Approval_Logs_v1.0(1).xlsx\n/5. Client Data Room/07 Feature-level usage metrics (by tier, customer segment)/Brightpath_Feature_Usage_Metrics_by_Tier_Segment_v1.0.xlsx\n/5. Client Data Room/07 Feature-level usage metrics (by tier, customer segment)/Brightpath_Feature_Usage_Metrics_Product & Engineering Collab.xlsx\n/5. Client Data Room/07 Feature-level usage metrics (by tier, customer segment)/Brightpath_Feature_Usage_Metrics_v_raw format.xlsx\n/5. Client Data Room/07 Feature-level usage metrics (by tier, customer segment)/Brightpath_Feature_Usage_Metrics_+ Customer Service Input.xlsx\n/5. Client Data Room/05 Renewal and churn data (logo churn, revenue churn, reasons)/Brightpath_Renewal_Churn_v1.0.xlsx\n/5. Client Data Room/04 Win-loss deal analysis (with reason codes)/Brightpath_WinLoss_Analysis_v1.0.xlsx\n/5. Client Data Room/04 Win-loss deal analysis (with reason codes)/Brightpath_WinLoss_Analysis_final_final_draft.xlsx\n/5. Client Data Room/04 Win-loss deal analysis (with reason codes)/Brightpath_WinLoss_Analysis_v0.9_updated_format.xlsx\n/5. Client Data Room/04 Win-loss deal analysis (with reason codes)/Brightpath_WinLoss_Analysis_xx.xlsx\n/5. Client Data Room/08 Customer segmentation data (SMB - Mid-market - Enterprise - Industry)/Brightpath_Customer_Segmentation_v1.0.xlsx\n/5. Client Data Room/08 Customer segmentation data (SMB - Mid-market - Enterprise - Industry)/Brightpath_Customer_Segmentation_v0.8.xlsx\n/5. Client Data Room/08 Customer segmentation data (SMB - Mid-market - Enterprise - Industry)/Brightpath_Customer_Segmentation_v0.7.xlsx"
+        }
+      ],
+      "tool_call_id": "call-8dcd4d05-1306-4e94-807a-e9055a676f07-6"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"todos\":[{\"id\":\"1\",\"status\":\"in_progress\",\"content\":\"Discover and load seat utilization data and targets\"},{\"id\":\"2\",\"status\":\"pending\",\"content\":\"Extract baseline actual seats and shares\"},{\"id\":\"3\",\"status\":\"pending\",\"content\":\"Extract 2025 target seats and shares\"},{\"id\":\"4\",\"status\":\"pending\",\"content\":\"Compute surplus for Medium in Enterprise and percentage point difference for Business High\"}],\"merge\":false}",
+            "name": "todo_write"
+          },
+          "id": "call-98eb3b00-aaaa-4e90-a623-f7c7bd1f1c7d-7",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Great! There's /5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx – that's probably the baseline seat utilization data.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Great! There's /5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx – that's probably the baseline seat utilization data.\n"
+      }
+    },
+    {
+      "content": "{\"success\": true, \"created\": [\"1\", \"2\", \"3\", \"4\"], \"updated\": [], \"todos\": [{\"id\": \"1\", \"content\": \"Discover and load seat utilization data and targets\", \"status\": \"in_progress\"}, {\"id\": \"2\", \"content\": \"Extract baseline actual seats and shares\", \"status\": \"pending\"}, {\"id\": \"3\", \"content\": \"Extract 2025 target seats and shares\", \"status\": \"pending\"}, {\"id\": \"4\", \"content\": \"Compute surplus for Medium in Enterprise and percentage point difference for Business High\", \"status\": \"pending\"}], \"summary\": {\"total\": 4, \"pending\": 3, \"in_progress\": 1, \"completed\": 0, \"cancelled\": 0}}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-98eb3b00-aaaa-4e90-a623-f7c7bd1f1c7d-7",
+      "name": "todo_write"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"list_tabs\",\"file_path\":\"/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\"}}",
+            "name": "sheets_server_sheets"
+          },
+          "id": "call-0e18577f-3b29-4e40-aaec-931d7006b2cd-8",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Todo set. Now, read the seat utilization file. Use list_tabs first.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Todo set. Now, read the seat utilization file. Use list_tabs first."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"list_tabs\",\"error\":null,\"help\":null,\"read_tab\":null,\"read_csv\":null,\"create\":null,\"delete\":null,\"list_tabs\":{\"raw_output\":\"{'worksheets': [{'name': 'Sheet1', 'index': 0, 'row_count': 5001, 'column_count': 6}]}\"},\"add_tab\":null,\"delete_tab\":null,\"edit\":null,\"add_content\":null,\"delete_content\":null,\"create_chart\":null,\"filter_tab\":null}"
+        }
+      ],
+      "tool_call_id": "call-0e18577f-3b29-4e40-aaec-931d7006b2cd-8"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_tab\",\"file_path\":\"/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\",\"tab_index\":0,\"max_rows\":50,\"compact\":true}}",
+            "name": "sheets_server_sheets"
+          },
+          "id": "call-b2c28a90-6c7f-46ed-a74c-c3f575885acd-9",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "One sheet, Sheet1, 5001 rows – large, so use read_tab with max_rows or cell_range.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "One sheet, Sheet1, 5001 rows – large, so use read_tab with max_rows or cell_range.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"read_tab\",\"error\":null,\"help\":null,\"read_tab\":{\"raw_output\":\"Deal_ID,Customer_Name,Pricing_Tier,Seats_Purchased,Seats_Used,Utilization_Percentage\\r\\nDL-10000,Straton Advisory,Enterprise,21,17,0.81\\r\\nDL-10001,Fairbrooke Digital,Team,184,143,0.78\\r\\nDL-10002,LegalWorks LLP,Enterprise,195,171,0.88\\r\\nDL-10003,LegalWorks LLP,Team,106,70,0.66\\r\\nDL-10004,Straton Advisory,Team,263,190,0.72\\r\\nDL-10005,Fairbrooke Digital,Team,494,387,0.78\\r\\nDL-10006,Straton Advisory,Business,287,223,0.78\\r\\nDL-10007,NovaEdge Consulting,Team,476,382,0.8\\r\\nDL-10008,LegalWorks LLP,Business,391,345,0.88\\r\\nDL-10009,Fairbrooke Digital,Team,44,34,0.77\\r\\nDL-10010,NovaEdge Consulting,Enterprise,326,252,0.77\\r\\nDL-10011,Harper Finch Legal,Business,138,117,0.85\\r\\nDL-10012,NovaEdge Consulting,Business,435,330,0.76\\r\\nDL-10013,Harper Finch Legal,Growth,270,210,0.78\\r\\nDL-10014,LegalWorks LLP,Business,281,235,0.84\\r\\nDL-10015,Straton Advisory,Enterprise,347,307,0.88\\r\\nDL-10016,Fairbrooke Digital,Team,335,224,0.67\\r\\nDL-10017,NovaEdge Consulting,Growth,296,216,0.73\\r\\nDL-10018,NovaEdge Consulting,Team,335,231,0.69\\r\\nDL-10019,Harper Finch Legal,Enterprise,66,50,0.76\\r\\nDL-10020,Straton Advisory,Business,171,142,0.83\\r\\nDL-10021,Harper Finch Legal,Team,395,237,0.6\\r\\nDL-10022,Fairbrooke Digital,Team,236,194,0.82\\r\\nDL-10023,LegalWorks LLP,Team,87,68,0.78\\r\\nDL-10024,Straton Advisory,Enterprise,249,230,0.92\\r\\nDL-10025,NovaEdge Consulting,Business,164,131,0.8\\r\\nDL-10026,LegalWorks LLP,Team,325,242,0.74\\r\\nDL-10027,Straton Advisory,Business,266,214,0.8\\r\\nDL-10028,LegalWorks LLP,Growth,82,62,0.76\\r\\nDL-10029,Fairbrooke Digital,Business,186,137,0.74\\r\\nDL-10030,Fairbrooke Digital,Team,122,87,0.71\\r\\nDL-10031,Fairbrooke Digital,Enterprise,487,376,0.77\\r\\nDL-10032,NovaEdge Consulting,Growth,96,71,0.74\\r\\nDL-10033,NovaEdge Consulting,Business,169,127,0.75\\r\\nDL-10034,LegalWorks LLP,Business,82,66,0.8\\r\\nDL-10035,Straton Advisory,Team,90,74,0.82\\r\\nDL-10036,NovaEdge Consulting,Growth,418,382,0.91\\r\\nDL-10037,NovaEdge Consulting,Enterprise,271,234,0.86\\r\\nDL-10038,Straton Advisory,Team,151,105,0.7\\r\\nDL-10039,Fairbrooke Digital,Growth,319,281,0.88\\r\\nDL-10040,Harper Finch Legal,Growth,469,443,0.94\\r\\nDL-10041,NovaEdge Consulting,Enterprise,72,58,0.81\\r\\nDL-10042,NovaEdge Consulting,Business,26,16,0.62\\r\\nDL-10043,NovaEdge Consulting,Growth,160,124,0.78\\r\\nDL-10044,Harper Finch Legal,Enterprise,13,12,0.92\\r\\nDL-10045,NovaEdge Consulting,Growth,116,102,0.88\\r\\nDL-10046,Harper Finch Legal,Team,157,98,0.62\\r\\nDL-10047,NovaEdge Consulting,Business,213,156,0.73\\r\\nDL-10048,LegalWorks LLP,Team,428,272,0.64\"},\"read_csv\":null,\"create\":null,\"delete\":null,\"list_tabs\":null,\"add_tab\":null,\"delete_tab\":null,\"edit\":null,\"add_content\":null,\"delete_content\":null,\"create_chart\":null,\"filter_tab\":null}"
+        }
+      ],
+      "tool_call_id": "call-b2c28a90-6c7f-46ed-a74c-c3f575885acd-9"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"tool_name\":\"pdf_server_pdf\"}",
+            "name": "toolbelt_add_tool"
+          },
+          "id": "call-e5f45899-ba11-4991-af4b-7e3eb7a52e56-10",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "The raw_output is truncated, but it shows columns: Deal_ID, Customer_Name, Pricing_Tier, Seats_Purchased, Seats_Used, Utilization_Percentage\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "The raw_output is truncated, but it shows columns: Deal_ID, Customer_Name, Pricing_Tier, Seats_Purchased, Seats_Used, Utilization_Percentage\n"
+      }
+    },
+    {
+      "content": "{\"success\": true, \"toolbelt_size\": 4}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-e5f45899-ba11-4991-af4b-7e3eb7a52e56-10",
+      "name": "toolbelt_add_tool"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"help\"}}",
+            "name": "pdf_server_pdf"
+          },
+          "id": "call-46195a94-05ea-4de5-bc22-351438f5d772-11",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Added. Now, use pdf_server_pdf to read the targeted seat share PDF. First, perhaps list actions with help.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Added. Now, use pdf_server_pdf to read the targeted seat share PDF. First, perhaps list actions with help."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"help\",\"error\":null,\"help\":{\"tool_name\":\"pdf\",\"description\":\"PDF operations: create, read, search, and extract images from .pdf files.\",\"actions\":{\"help\":{\"description\":\"List all available actions\",\"required_params\":[],\"optional_params\":[]},\"create\":{\"description\":\"Create a new PDF document\",\"required_params\":[\"directory\",\"file_name\",\"content\"],\"optional_params\":[\"metadata\",\"page_size\"]},\"read_pages\":{\"description\":\"Read PDF pages (text + images + strikethrough)\",\"required_params\":[\"file_path\"],\"optional_params\":[\"pages\"]},\"read_image\":{\"description\":\"Read an extracted image by annotation\",\"required_params\":[\"file_path\",\"annotation\"],\"optional_params\":[]},\"page_as_image\":{\"description\":\"Render a page as an image\",\"required_params\":[\"file_path\",\"page_number\"],\"optional_params\":[]},\"search\":{\"description\":\"Search text in PDF (like Ctrl+F)\",\"required_params\":[\"file_path\",\"query\"],\"optional_params\":[\"case_sensitive\",\"whole_word\",\"max_results\",\"context_chars\"]}}},\"create\":null,\"read_pages\":null,\"search\":null}"
+        }
+      ],
+      "tool_call_id": "call-46195a94-05ea-4de5-bc22-351438f5d772-11"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_pages\",\"file_path\":\"/Targeted seat share.pdf\",\"pages\":[1]}}",
+            "name": "pdf_server_pdf"
+          },
+          "id": "call-31dd3024-cc04-466d-9b17-ddeae253c0c2-12",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Actions: read_pages, search, etc. Let's try reading the PDF pages.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Actions: read_pages, search, etc. Let's try reading the PDF pages."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"read_pages\",\"error\":null,\"help\":null,\"create\":null,\"read_pages\":{\"raw_output\":\"[pdf: pages=1, read=1]\\n[images: count=1]\\n\\n[page 1]\\n\\n[image: page=1, index=0, ref=@page1_img0, size=1400.0x800.0]\\n\\n[errors]\\n- Page 1: no text extracted (page may be scanned/image-only)\"},\"search\":null}"
+        }
+      ],
+      "tool_call_id": "call-31dd3024-cc04-466d-9b17-ddeae253c0c2-12"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_image\",\"file_path\":\"/Targeted seat share.pdf\",\"annotation\":\"page1_img0\"}}",
+            "name": "pdf_server_pdf"
+          },
+          "id": "call-f169096e-ab4e-404b-b046-24f64f5e8b83-13",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "It's image-only, no text. There's an image: page1_img0.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "It's image-only, no text. There's an image: page1_img0.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "Image(s) returned by pdf_server_pdf tool"
+        }
+      ],
+      "tool_call_id": "call-f169096e-ab4e-404b-b046-24f64f5e8b83-13"
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/jpeg;base64,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Dt8vV6VMRZyFL1KSixJF2WbayO1yy62vZ6IuytkXfYvUVFS6LdD53xdQJXC9RjrKK+alIToEOrxai9sGSg8dG45IL4jIeZ0PjF4yI5+dcvFsuiPcdhodarWIcAyNbpUnJytQm4TYjYU256wU2rKqK1EcrVRLtWyXRUVUQD5Cxj364j8tVD+7jGLOzVPgGxpP1WfqMWtYcbEnJyPNOa2FMWasWK+IrU18Ge33Fv73vGP05h78KY9ZbcmztktCpoUaVLliI+E4KdlWZ8rrK6nTo0eSZmfbGLkIOve97xj9OYe/CmPWPe94x+nMPfhTHrJ+Gck1t0oOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9Y973jH6cw9+FMescM5JrbpOBMs1d8OQg6973vGP05h78KY9ZjpXgQxdHxFP0ZKpQmuk5eXjrGWFMZX8asVMqdKcVrqvKTcOGck1t0nAmWau+HMgde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+GiYc7zsV/Uyn9whrh26Q4D8aSdKqdPbV8NvZUGQmvesOYuzI9HpbXwqljH+97xh9OYe/CmPWR0M75LE0pml7ZwnCElPM2VzRoxFH2RjGMuQg6973vGP05h78KY9Y973jH6cw9+FMesk4ZyTW3Sj4EyzV3w5CDr3ve8Y/TmHvwpj1j3veMfpzD34Ux6xwzkmtuk4EyzV3w5CDr3ve8Y/TmHvwpj1j3veMfpzD34Ux6xwzkmtuk4EyzV3w5CDr3ve8Y/TmHvwpj1j3veMfpzD34Ux6xwzkmtuk4EyzV3w5CDptY4EMXU2bpUu6qUKMtRnOxUcyFMWhdqiRMzujtdvBq5NTI+97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+HIQde973jH6cw9+FMese97xj9OYe/CmPWOGck1t0nAmWau+GiYF5dd8hTf5NNcU7bRuA7GlMWdWHV8NxOy5OLKOzQ5hMqPREVya70sWPve8Y/TmHvwpj1kdHO+SxSmb26UlLM2VzQiLu+HIAde973jH6cw9+FMese97xj9OYe/CmPWScM5JrbpR8CZZq74chB173veMfpzD34Ux6x73vGP05h78KY9Y4ZyTW3ScCZZq74chB173veMfpzD34Ux6x73vGP05h78KY9Y4ZyTW3ScCZZq74chB173veMfpzD34Ux6x73vGP05h78KY9Y4ZyTW3ScCZZq74chB07EPAfi+j05k46qUKYR01Ly+SHCmLpx0ZkLN4dG58y9CKZD3veMPpzD34Ux6xwzkmtuk4EyzV3w5CDr3ve8Y/TmHvwpj1j3veMfpzD34U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"
+          }
+        }
+      ]
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_pages\",\"file_path\":\"/Targeted seat share.pdf\",\"pages\":[2]}}",
+            "name": "pdf_server_pdf"
+          },
+          "id": "call-520e309b-30f9-4fd6-b88d-409ea893e966-14",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "The image shows the Target Seat Utilization Strategy (2025 Vision). It's a stacked bar chart for Pricing Tiers: Enterprise, Business, Team, Growth.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "The image shows the Target Seat Utilization Strategy (2025 Vision). It's a stacked bar chart for Pricing Tiers: Enterprise, Business, Team, Growth.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"read_pages\",\"error\":null,\"help\":null,\"create\":null,\"read_pages\":{\"raw_output\":\"[pdf: pages=1, read=0]\"},\"search\":null}"
+        }
+      ],
+      "tool_call_id": "call-520e309b-30f9-4fd6-b88d-409ea893e966-14"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"tool_name\":\"code_execution_server_code_exec\"}",
+            "name": "toolbelt_add_tool"
+          },
+          "id": "call-40c1c620-820d-47d7-b8e8-78852e336340-15",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Only 1 page. So the chart is the targets.\nThe user query is: Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Only 1 page. So the chart is the targets.\nThe user query is: Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics."
+      }
+    },
+    {
+      "content": "{\"success\": true, \"toolbelt_size\": 5}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-40c1c620-820d-47d7-b8e8-78852e336340-15",
+      "name": "toolbelt_add_tool"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"import pandas as pd; df = pd.read_excel('/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx'); print(df.shape); print(df.columns.tolist()); print(df['Pricing_Tier'].value_counts())\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-205e2852-980b-4ed2-b3c3-77eb80c2ab88-16",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Added. Now, try to see if pandas is available by executing code to load the file.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Added. Now, try to see if pandas is available by executing code to load the file."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"Error: It looks like you passed raw Python code. This tool executes shell commands, not Python directly. To run Python:\\n• One-liner: python -c 'your_code_here'\\n• Multi-line: Write to file first, then run:\\n  cat > script.py << 'EOF'\\n  your_code\\n  EOF && python script.py\"}"
+        }
+      ],
+      "tool_call_id": "call-205e2852-980b-4ed2-b3c3-77eb80c2ab88-16"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python -c \\\"import pandas as pd; df = pd.read_excel('/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx'); print(df.shape); print(df.columns.tolist()); print(df['Pricing_Tier'].value_counts())\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-033327bd-82e7-4e02-9523-6431178d8efc-17",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Oh, as per pitfall in cheatsheet: \"code_execution_server_code_exec calls fail with shell syntax errors or \"python: not found\" if the code string uses shell constructs\" Wait, the error says it executes...",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Oh, as per pitfall in cheatsheet: \"code_execution_server_code_exec calls fail with shell syntax errors or \"python: not found\" if the code string uses shell constructs\" Wait, the error says it executes..."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"\\nError output:\\nsh: 1: python: not found\\n\\n\\nCommand failed with exit code 127\"}"
+        }
+      ],
+      "tool_call_id": "call-033327bd-82e7-4e02-9523-6431178d8efc-17"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"which python; which python3; ls /usr/bin/python* ; echo $PATH\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-acf603e7-ac74-4785-9994-b01bc01b610c-18",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Python not found. The environment may not have python in PATH, or it's a different setup.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Python not found. The environment may not have python in PATH, or it's a different setup.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"/usr/bin/python3\\n/usr/bin/python3\\n/usr/bin/python3.13\\n/usr/bin/python3.13-config\\n/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-acf603e7-ac74-4785-9994-b01bc01b610c-18"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"import pandas as pd; print(pd.__version__); import sys; print(sys.executable)\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-91933e22-d702-48cb-9ed9-5530c3eaf983-19",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Python3 is available. So use python3 -c \n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Python3 is available. So use python3 -c \n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"\\nError output:\\nTraceback (most recent call last):\\n  File \\\"<string>\\\", line 1, in <module>\\n    import pandas as pd; print(pd.__version__); import sys; print(sys.executable)\\n    ^^^^^^^^^^^^^^^^^^^\\nModuleNotFoundError: No module named 'pandas'\\n\\n\\nCommand failed with exit code 1\"}"
+        }
+      ],
+      "tool_call_id": "call-91933e22-d702-48cb-9ed9-5530c3eaf983-19"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"import openpyxl; print(openpyxl.__version__)\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-c0b5d7d4-6e6c-43da-9c70-fed637d9bce8-20",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "No pandas. So can't use pandas easily. Perhaps use openpyxl or just sheets tool with multiple reads, but that's tedious for 5000 rows.\nThe user query is cut off at the end: \"For Enterprise (leftmost bar):\n\n- Blue from 0 to ~10%\n\n- Orange from 10\"\n\nIt seems incomplete, but I think the task is about seat utilization data and strategic targets.\n\nI need to find the baseline seat utilization data and 2025 strategic targets.\n\nBut in the reference, there are files like discount approval logs, churn data, etc., but not specifically seat utilization.\n\nPerhaps the seat utilization is in one of the xlsx files.\n\nThe query says \"Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "No pandas. So can't use pandas easily. Perhaps use openpyxl or just sheets tool with multiple reads, but that's tedious for 5000 rows.\nThe user query is cut off at the end: \"For Enterprise (leftmost bar):\n\n- Blue from 0 to ~10%\n\n- Orange from 10\"\n\nIt seems incomplete, but I think the task is about seat utilization data and strategic targets.\n\nI need to find the baseline seat utilization data and 2025 strategic targets.\n\nBut in the reference, there are files like discount approval logs, churn data, etc., but not specifically seat utilization.\n\nPerhaps the seat utilization is in one of the xlsx files.\n\nThe query says \"Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"\\nError output:\\nTraceback (most recent call last):\\n  File \\\"<string>\\\", line 1, in <module>\\n    import openpyxl; print(openpyxl.__version__)\\n    ^^^^^^^^^^^^^^^\\nModuleNotFoundError: No module named 'openpyxl'\\n\\n\\nCommand failed with exit code 1\"}"
+        }
+      ],
+      "tool_call_id": "call-c0b5d7d4-6e6c-43da-9c70-fed637d9bce8-20"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_tab\",\"file_path\":\"/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\",\"tab_index\":0,\"max_rows\":6000,\"compact\":true}}",
+            "name": "sheets_server_sheets"
+          },
+          "id": "call-c9d42916-e8d2-458a-ae57-748dd09d99ad-21",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "No. Perhaps use csv, but xlsx not csv.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "No. Perhaps use csv, but xlsx not csv.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Tool returned extremely large output (252,597 characters). This exceeds the maximum allowed size. Try a more specific query or break down the request."
+        }
+      ],
+      "tool_call_id": "call-c9d42916-e8d2-458a-ae57-748dd09d99ad-21"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"action\":\"read_tab\",\"file_path\":\"/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\",\"tab_index\":0,\"cell_range\":\"A1:F1001\",\"compact\":true}}",
+            "name": "sheets_server_sheets"
+          },
+          "id": "call-703d8034-43b0-48e5-8243-67392196936a-22",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Too large. So need chunks.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Too large. So need chunks.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"action\":\"read_tab\",\"error\":null,\"help\":null,\"read_tab\":{\"raw_output\":\"Deal_ID,Customer_Name,Pricing_Tier,Seats_Purchased,Seats_Used,Utilization_Percentage\\r\\nDL-10000,Straton Advisory,Enterprise,21,17,0.81\\r\\nDL-10001,Fairbrooke Digital,Team,184,143,0.78\\r\\nDL-10002,LegalWorks LLP,Enterprise,195,171,0.88\\r\\nDL-10003,LegalWorks LLP,Team,106,70,0.66\\r\\nDL-10004,Straton Advisory,Team,263,190,0.72\\r\\nDL-10005,Fairbrooke Digital,Team,494,387,0.78\\r\\nDL-10006,Straton Advisory,Business,287,223,0.78\\r\\nDL-10007,NovaEdge Consulting,Team,476,382,0.8\\r\\nDL-10008,LegalWorks LLP,Business,391,345,0.88\\r\\nDL-10009,Fairbrooke Digital,Team,44,34,0.77\\r\\nDL-10010,NovaEdge Consulting,Enterprise,326,252,0.77\\r\\nDL-10011,Harper Finch Legal,Business,138,117,0.85\\r\\nDL-10012,NovaEdge Consulting,Business,435,330,0.76\\r\\nDL-10013,Harper Finch Legal,Growth,270,210,0.78\\r\\nDL-10014,LegalWorks LLP,Business,281,235,0.84\\r\\nDL-10015,Straton Advisory,Enterprise,347,307,0.88\\r\\nDL-10016,Fairbrooke Digital,Team,335,224,0.67\\r\\nDL-10017,NovaEdge Consulting,Growth,296,216,0.73\\r\\nDL-10018,NovaEdge Consulting,Team,335,231,0.69\\r\\nDL-10019,Harper Finch Legal,Enterprise,66,50,0.76\\r\\nDL-10020,Straton Advisory,Business,171,142,0.83\\r\\nDL-10021,Harper Finch Legal,Team,395,237,0.6\\r\\nDL-10022,Fairbrooke Digital,Team,236,194,0.82\\r\\nDL-10023,LegalWorks LLP,Team,87,68,0.78\\r\\nDL-10024,Straton Advisory,Enterprise,249,230,0.92\\r\\nDL-10025,NovaEdge Consulting,Business,164,131,0.8\\r\\nDL-10026,LegalWorks LLP,Team,325,242,0.74\\r\\nDL-10027,Straton Advisory,Business,266,214,0.8\\r\\nDL-10028,LegalWorks LLP,Growth,82,62,0.76\\r\\nDL-10029,Fairbrooke Digital,Business,186,137,0.74\\r\\nDL-10030,Fairbrooke Digital,Team,122,87,0.71\\r\\nDL-10031,Fairbrooke Digital,Enterprise,487,376,0.77\\r\\nDL-10032,NovaEdge Consulting,Growth,96,71,0.74\\r\\nDL-10033,NovaEdge Consulting,Business,169,127,0.75\\r\\nDL-10034,LegalWorks LLP,Business,82,66,0.8\\r\\nDL-10035,Straton Advisory,Team,90,74,0.82\\r\\nDL-10036,NovaEdge Consulting,Growth,418,382,0.91\\r\\nDL-10037,NovaEdge Consulting,Enterprise,271,234,0.86\\r\\nDL-10038,Straton Advisory,Team,151,105,0.7\\r\\nDL-10039,Fairbrooke Digital,Growth,319,281,0.88\\r\\nDL-10040,Harper Finch Legal,Growth,469,443,0.94\\r\\nDL-10041,NovaEdge Consulting,Enterprise,72,58,0.81\\r\\nDL-10042,NovaEdge Consulting,Business,26,16,0.62\\r\\nDL-10043,NovaEdge Consulting,Growth,160,124,0.78\\r\\nDL-10044,Harper Finch Legal,Enterprise,13,12,0.92\\r\\nDL-10045,NovaEdge Consulting,Growth,116,102,0.88\\r\\nDL-10046,Harper Finch Legal,Team,157,98,0.62\\r\\nDL-10047,NovaEdge Consulting,Business,213,156,0.73\\r\\nDL-10048,LegalWorks LLP,Team,428,272,0.64\\r\\nDL-10049,Straton Advisory,Growth,138,97,0.7\\r\\nDL-10050,LegalWorks LLP,Business,320,245,0.77\\r\\nDL-10051,Straton Advisory,Team,192,147,0.77\\r\\nDL-10052,NovaEdge Consulting,Growth,84,66,0.79\\r\\nDL-10053,Fairbrooke Digital,Team,80,61,0.76\\r\\nDL-10054,Straton Advisory,Enterprise,235,194,0.83\\r\\nDL-10055,NovaEdge Consulting,Growth,481,350,0.73\\r\\nDL-10056,NovaEdge Consulting,Team,192,148,0.77\\r\\nDL-10057,NovaEdge Consulting,Growth,82,69,0.84\\r\\nDL-10058,Fairbrooke Digital,Enterprise,284,254,0.89\\r\\nDL-10059,Harper Finch Legal,Business,100,70,0.7\\r\\nDL-10060,Harper Finch Legal,Growth,497,453,0.91\\r\\nDL-10061,Straton Advisory,Team,215,144,0.67\\r\\nDL-10062,Harper Finch Legal,Growth,78,63,0.81\\r\\nDL-10063,Harper Finch Legal,Business,118,86,0.73\\r\\nDL-10064,Straton Advisory,Team,242,165,0.68\\r\\nDL-10065,NovaEdge Consulting,Growth,155,113,0.73\\r\\nDL-10066,NovaEdge Consulting,Business,237,180,0.76\\r\\nDL-10067,Straton Advisory,Growth,237,203,0.86\\r\\nDL-10068,Fairbrooke Digital,Team,271,225,0.83\\r\\nDL-10069,Fairbrooke Digital,Team,360,238,0.66\\r\\nDL-10070,NovaEdge Consulting,Growth,441,345,0.78\\r\\nDL-10071,NovaEdge Consulting,Growth,323,266,0.82\\r\\nDL-10072,Harper Finch Legal,Business,7,5,0.71\\r\\nDL-10073,Straton Advisory,Team,459,298,0.65\\r\\nDL-10074,Straton Advisory,Business,100,67,0.67\\r\\nDL-10075,LegalWorks LLP,Growth,479,373,0.78\\r\\nDL-10076,Fairbrooke Digital,Growth,268,198,0.74\\r\\nDL-10077,Straton Advisory,Enterprise,220,214,0.97\\r\\nDL-10078,LegalWorks LLP,Enterprise,328,287,0.88\\r\\nDL-10079,NovaEdge Consulting,Team,466,354,0.76\\r\\nDL-10080,LegalWorks LLP,Enterprise,246,200,0.81\\r\\nDL-10081,NovaEdge Consulting,Business,5,3,0.6\\r\\nDL-10082,NovaEdge Consulting,Enterprise,230,188,0.82\\r\\nDL-10083,Harper Finch Legal,Team,40,30,0.75\\r\\nDL-10084,Fairbrooke Digital,Business,197,150,0.76\\r\\nDL-10085,Fairbrooke Digital,Team,199,132,0.66\\r\\nDL-10086,Straton Advisory,Team,383,298,0.78\\r\\nDL-10087,LegalWorks LLP,Enterprise,232,225,0.97\\r\\nDL-10088,NovaEdge Consulting,Enterprise,262,224,0.85\\r\\nDL-10089,Harper Finch Legal,Team,24,19,0.79\\r\\nDL-10090,LegalWorks LLP,Growth,393,288,0.73\\r\\nDL-10091,LegalWorks LLP,Enterprise,7,6,0.86\\r\\nDL-10092,LegalWorks LLP,Team,162,103,0.64\\r\\nDL-10093,LegalWorks LLP,Team,218,166,0.76\\r\\nDL-10094,Fairbrooke Digital,Business,455,298,0.65\\r\\nDL-10095,LegalWorks LLP,Team,430,266,0.62\\r\\nDL-10096,LegalWorks LLP,Growth,219,206,0.94\\r\\nDL-10097,NovaEdge Consulting,Business,487,433,0.89\\r\\nDL-10098,NovaEdge Consulting,Team,36,25,0.69\\r\\nDL-10099,Straton Advisory,Business,467,392,0.84\\r\\nDL-10100,Straton Advisory,Team,250,163,0.65\\r\\nDL-10101,Harper Finch Legal,Business,460,330,0.72\\r\\nDL-10102,LegalWorks LLP,Team,184,112,0.61\\r\\nDL-10103,NovaEdge Consulting,Team,31,24,0.77\\r\\nDL-10104,LegalWorks LLP,Team,408,289,0.71\\r\\nDL-10105,Fairbrooke Digital,Team,66,44,0.67\\r\\nDL-10106,Fairbrooke Digital,Team,483,337,0.7\\r\\nDL-10107,Harper Finch Legal,Team,484,321,0.66\\r\\nDL-10108,Fairbrooke Digital,Growth,100,76,0.76\\r\\nDL-10109,Harper Finch Legal,Business,327,246,0.75\\r\\nDL-10110,Straton Advisory,Growth,342,252,0.74\\r\\nDL-10111,Fairbrooke Digital,Growth,299,219,0.73\\r\\nDL-10112,LegalWorks LLP,Team,26,18,0.69\\r\\nDL-10113,Fairbrooke Digital,Team,423,269,0.64\\r\\nDL-10114,Fairbrooke Digital,Business,223,174,0.78\\r\\nDL-10115,Fairbrooke Digital,Team,19,15,0.79\\r\\nDL-10116,Fairbrooke Digital,Growth,258,190,0.74\\r\\nDL-10117,Fairbrooke Digital,Enterprise,98,87,0.89\\r\\nDL-10118,Straton Advisory,Growth,449,413,0.92\\r\\nDL-10119,Fairbrooke Digital,Enterprise,300,269,0.9\\r\\nDL-10120,Straton Advisory,Team,111,73,0.66\\r\\nDL-10121,NovaEdge Consulting,Business,476,408,0.86\\r\\nDL-10122,NovaEdge Consulting,Team,260,181,0.7\\r\\nDL-10123,Straton Advisory,Team,282,181,0.64\\r\\nDL-10124,LegalWorks LLP,Team,486,302,0.62\\r\\nDL-10125,Straton Advisory,Enterprise,155,123,0.79\\r\\nDL-10126,Harper Finch Legal,Business,335,288,0.86\\r\\nDL-10127,NovaEdge Consulting,Business,236,180,0.76\\r\\nDL-10128,Harper Finch Legal,Enterprise,466,434,0.93\\r\\nDL-10129,Harper Finch Legal,Team,272,206,0.76\\r\\nDL-10130,NovaEdge Consulting,Team,379,290,0.77\\r\\nDL-10131,NovaEdge Consulting,Enterprise,272,262,0.96\\r\\nDL-10132,Straton Advisory,Team,462,342,0.74\\r\\nDL-10133,NovaEdge Consulting,Business,487,401,0.82\\r\\nDL-10134,LegalWorks LLP,Business,355,296,0.83\\r\\nDL-10135,Straton Advisory,Enterprise,14,11,0.79\\r\\nDL-10136,Straton Advisory,Team,120,100,0.83\\r\\nDL-10137,Harper Finch Legal,Growth,480,368,0.77\\r\\nDL-10138,Harper Finch Legal,Growth,19,16,0.84\\r\\nDL-10139,NovaEdge Consulting,Team,469,321,0.68\\r\\nDL-10140,Straton Advisory,Business,5,3,0.6\\r\\nDL-10141,LegalWorks LLP,Growth,16,11,0.69\\r\\nDL-10142,Straton Advisory,Team,149,124,0.83\\r\\nDL-10143,NovaEdge Consulting,Business,11,9,0.82\\r\\nDL-10144,NovaEdge Consulting,Growth,201,161,0.8\\r\\nDL-10145,LegalWorks LLP,Team,192,145,0.76\\r\\nDL-10146,Harper Finch Legal,Team,262,189,0.72\\r\\nDL-10147,Fairbrooke Digital,Business,465,373,0.8\\r\\nDL-10148,Harper Finch Legal,Team,261,189,0.72\\r\\nDL-10149,LegalWorks LLP,Team,314,205,0.65\\r\\nDL-10150,Straton Advisory,Business,475,414,0.87\\r\\nDL-10151,NovaEdge Consulting,Business,141,126,0.89\\r\\nDL-10152,Straton Advisory,Team,137,103,0.75\\r\\nDL-10153,Fairbrooke Digital,Enterprise,424,414,0.98\\r\\nDL-10154,NovaEdge Consulting,Business,357,280,0.78\\r\\nDL-10155,Harper Finch Legal,Team,157,129,0.82\\r\\nDL-10156,Harper Finch Legal,Team,90,70,0.78\\r\\nDL-10157,LegalWorks LLP,Team,78,60,0.77\\r\\nDL-10158,Fairbrooke Digital,Growth,283,244,0.86\\r\\nDL-10159,Straton Advisory,Business,437,294,0.67\\r\\nDL-10160,NovaEdge Consulting,Business,201,165,0.82\\r\\nDL-10161,NovaEdge Consulting,Enterprise,401,345,0.86\\r\\nDL-10162,Harper Finch Legal,Growth,490,428,0.87\\r\\nDL-10163,NovaEdge Consulting,Business,334,272,0.81\\r\\nDL-10164,Straton Advisory,Team,308,192,0.62\\r\\nDL-10165,Fairbrooke Digital,Business,318,225,0.71\\r\\nDL-10166,Fairbrooke Digital,Enterprise,210,198,0.94\\r\\nDL-10167,LegalWorks LLP,Growth,395,307,0.78\\r\\nDL-10168,LegalWorks LLP,Enterprise,187,170,0.91\\r\\nDL-10169,LegalWorks LLP,Team,64,54,0.84\\r\\nDL-10170,LegalWorks LLP,Enterprise,370,346,0.94\\r\\nDL-10171,NovaEdge Consulting,Enterprise,185,152,0.82\\r\\nDL-10172,Fairbrooke Digital,Growth,493,455,0.92\\r\\nDL-10173,Straton Advisory,Team,472,377,0.8\\r\\nDL-10174,Harper Finch Legal,Team,410,286,0.7\\r\\nDL-10175,Fairbrooke Digital,Growth,374,273,0.73\\r\\nDL-10176,Harper Finch Legal,Enterprise,150,123,0.82\\r\\nDL-10177,Harper Finch Legal,Enterprise,374,317,0.85\\r\\nDL-10178,Harper Finch Legal,Business,394,308,0.78\\r\\nDL-10179,Fairbrooke Digital,Team,385,312,0.81\\r\\nDL-10180,NovaEdge Consulting,Team,412,308,0.75\\r\\nDL-10181,Harper Finch Legal,Growth,131,108,0.82\\r\\nDL-10182,Straton Advisory,Growth,238,208,0.87\\r\\nDL-10183,Fairbrooke Digital,Growth,81,68,0.84\\r\\nDL-10184,Fairbrooke Digital,Enterprise,154,144,0.94\\r\\nDL-10185,Harper Finch Legal,Growth,282,246,0.87\\r\\nDL-10186,LegalWorks LLP,Enterprise,247,207,0.84\\r\\nDL-10187,NovaEdge Consulting,Enterprise,27,23,0.85\\r\\nDL-10188,Harper Finch Legal,Business,192,140,0.73\\r\\nDL-10189,Harper Finch Legal,Business,393,314,0.8\\r\\nDL-10190,Straton Advisory,Enterprise,277,261,0.94\\r\\nDL-10191,NovaEdge Consulting,Enterprise,494,441,0.89\\r\\nDL-10192,Straton Advisory,Team,21,15,0.71\\r\\nDL-10193,NovaEdge Consulting,Business,424,288,0.68\\r\\nDL-10194,LegalWorks LLP,Growth,254,227,0.89\\r\\nDL-10195,Straton Advisory,Growth,163,122,0.75\\r\\nDL-10196,Fairbrooke Digital,Team,45,33,0.73\\r\\nDL-10197,Fairbrooke Digital,Team,432,279,0.65\\r\\nDL-10198,Straton Advisory,Growth,59,48,0.81\\r\\nDL-10199,Straton Advisory,Enterprise,469,425,0.91\\r\\nDL-10200,Harper Finch Legal,Business,298,255,0.86\\r\\nDL-10201,Harper Finch Legal,Team,48,33,0.69\\r\\nDL-10202,Harper Finch Legal,Business,58,43,0.74\\r\\nDL-10203,Fairbrooke Digital,Team,182,126,0.69\\r\\nDL-10204,NovaEdge Consulting,Business,131,102,0.78\\r\\nDL-10205,Straton Advisory,Enterprise,245,223,0.91\\r\\nDL-10206,Fairbrooke Digital,Team,62,37,0.6\\r\\nDL-10207,NovaEdge Consulting,Team,235,142,0.6\\r\\nDL-10208,LegalWorks LLP,Enterprise,34,26,0.76\\r\\nDL-10209,LegalWorks LLP,Enterprise,258,227,0.88\\r\\nDL-10210,LegalWorks LLP,Enterprise,38,35,0.92\\r\\nDL-10211,Fairbrooke Digital,Team,141,103,0.73\\r\\nDL-10212,NovaEdge Consulting,Team,423,333,0.79\\r\\nDL-10213,Straton Advisory,Business,494,350,0.71\\r\\nDL-10214,Straton Advisory,Business,475,381,0.8\\r\\nDL-10215,NovaEdge Consulting,Team,455,277,0.61\\r\\nDL-10216,Straton Advisory,Business,56,42,0.75\\r\\nDL-10217,LegalWorks LLP,Growth,19,15,0.79\\r\\nDL-10218,NovaEdge Consulting,Team,132,98,0.74\\r\\nDL-10219,Harper Finch Legal,Business,52,44,0.85\\r\\nDL-10220,LegalWorks LLP,Enterprise,336,295,0.88\\r\\nDL-10221,Fairbrooke Digital,Team,337,283,0.84\\r\\nDL-10222,Fairbrooke Digital,Enterprise,443,427,0.96\\r\\nDL-10223,Fairbrooke Digital,Enterprise,342,300,0.88\\r\\nDL-10224,Fairbrooke Digital,Team,428,273,0.64\\r\\nDL-10225,Fairbrooke Digital,Enterprise,90,79,0.88\\r\\nDL-10226,Fairbrooke Digital,Growth,16,12,0.75\\r\\nDL-10227,LegalWorks LLP,Growth,349,306,0.88\\r\\nDL-10228,Fairbrooke Digital,Enterprise,267,229,0.86\\r\\nDL-10229,Fairbrooke Digital,Team,55,45,0.82\\r\\nDL-10230,Straton Advisory,Team,99,83,0.84\\r\\nDL-10231,Straton Advisory,Enterprise,330,317,0.96\\r\\nDL-10232,LegalWorks LLP,Team,381,237,0.62\\r\\nDL-10233,Harper Finch Legal,Enterprise,21,17,0.81\\r\\nDL-10234,Harper Finch Legal,Enterprise,441,390,0.88\\r\\nDL-10235,Fairbrooke Digital,Business,306,234,0.76\\r\\nDL-10236,NovaEdge Consulting,Team,190,121,0.64\\r\\nDL-10237,Fairbrooke Digital,Growth,384,273,0.71\\r\\nDL-10238,Harper Finch Legal,Enterprise,40,34,0.85\\r\\nDL-10239,LegalWorks LLP,Team,188,125,0.66\\r\\nDL-10240,Straton Advisory,Team,148,95,0.64\\r\\nDL-10241,NovaEdge Consulting,Team,465,365,0.78\\r\\nDL-10242,Straton Advisory,Business,293,203,0.69\\r\\nDL-10243,Fairbrooke Digital,Business,360,239,0.66\\r\\nDL-10244,Fairbrooke Digital,Growth,62,47,0.76\\r\\nDL-10245,NovaEdge Consulting,Team,398,261,0.66\\r\\nDL-10246,Fairbrooke Digital,Team,370,239,0.65\\r\\nDL-10247,Harper Finch Legal,Business,317,234,0.74\\r\\nDL-10248,Straton Advisory,Growth,155,131,0.85\\r\\nDL-10249,LegalWorks LLP,Enterprise,176,150,0.85\\r\\nDL-10250,LegalWorks LLP,Team,141,92,0.65\\r\\nDL-10251,LegalWorks LLP,Team,498,417,0.84\\r\\nDL-10252,LegalWorks LLP,Business,416,330,0.79\\r\\nDL-10253,Fairbrooke Digital,Business,38,32,0.84\\r\\nDL-10254,NovaEdge Consulting,Enterprise,267,247,0.93\\r\\nDL-10255,Harper Finch Legal,Team,257,196,0.76\\r\\nDL-10256,Straton Advisory,Growth,210,197,0.94\\r\\nDL-10257,Harper Finch Legal,Team,257,217,0.84\\r\\nDL-10258,Fairbrooke Digital,Business,310,241,0.78\\r\\nDL-10259,NovaEdge Consulting,Enterprise,206,161,0.78\\r\\nDL-10260,NovaEdge Consulting,Growth,142,125,0.88\\r\\nDL-10261,NovaEdge Consulting,Business,482,429,0.89\\r\\nDL-10262,Harper Finch Legal,Growth,179,163,0.91\\r\\nDL-10263,Harper Finch Legal,Enterprise,223,179,0.8\\r\\nDL-10264,Harper Finch Legal,Enterprise,234,180,0.77\\r\\nDL-10265,LegalWorks LLP,Enterprise,289,229,0.79\\r\\nDL-10266,Fairbrooke Digital,Team,450,325,0.72\\r\\nDL-10267,Straton Advisory,Enterprise,210,201,0.96\\r\\nDL-10268,NovaEdge Consulting,Business,128,93,0.73\\r\\nDL-10269,NovaEdge Consulting,Business,433,307,0.71\\r\\nDL-10270,Straton Advisory,Enterprise,147,136,0.93\\r\\nDL-10271,Straton Advisory,Enterprise,174,168,0.97\\r\\nDL-10272,Harper Finch Legal,Team,94,61,0.65\\r\\nDL-10273,NovaEdge Consulting,Business,148,106,0.72\\r\\nDL-10274,Straton Advisory,Team,37,22,0.59\\r\\nDL-10275,LegalWorks LLP,Enterprise,406,391,0.96\\r\\nDL-10276,Harper Finch Legal,Enterprise,118,101,0.86\\r\\nDL-10277,Harper Finch Legal,Growth,330,307,0.93\\r\\nDL-10278,Fairbrooke Digital,Growth,29,25,0.86\\r\\nDL-10279,Straton Advisory,Growth,165,122,0.74\\r\\nDL-10280,Harper Finch Legal,Team,56,39,0.7\\r\\nDL-10281,NovaEdge Consulting,Team,292,202,0.69\\r\\nDL-10282,Straton Advisory,Team,222,186,0.84\\r\\nDL-10283,Fairbrooke Digital,Growth,499,356,0.71\\r\\nDL-10284,Fairbrooke Digital,Team,469,294,0.63\\r\\nDL-10285,NovaEdge Consulting,Business,470,350,0.74\\r\\nDL-10286,Straton Advisory,Growth,68,53,0.78\\r\\nDL-10287,Straton Advisory,Enterprise,35,33,0.94\\r\\nDL-10288,NovaEdge Consulting,Team,178,122,0.69\\r\\nDL-10289,LegalWorks LLP,Business,61,46,0.75\\r\\nDL-10290,NovaEdge Consulting,Business,48,35,0.73\\r\\nDL-10291,LegalWorks LLP,Enterprise,211,181,0.86\\r\\nDL-10292,Harper Finch Legal,Enterprise,49,46,0.94\\r\\nDL-10293,Fairbrooke Digital,Enterprise,391,374,0.96\\r\\nDL-10294,Fairbrooke Digital,Growth,207,153,0.74\\r\\nDL-10295,Fairbrooke Digital,Team,397,251,0.63\\r\\nDL-10296,Harper Finch Legal,Growth,97,83,0.86\\r\\nDL-10297,LegalWorks LLP,Team,113,71,0.63\\r\\nDL-10298,NovaEdge Consulting,Business,481,355,0.74\\r\\nDL-10299,Straton Advisory,Growth,426,330,0.77\\r\\nDL-10300,Harper Finch Legal,Team,428,349,0.82\\r\\nDL-10301,NovaEdge Consulting,Team,35,21,0.6\\r\\nDL-10302,Fairbrooke Digital,Enterprise,393,351,0.89\\r\\nDL-10303,Fairbrooke Digital,Enterprise,463,437,0.94\\r\\nDL-10304,LegalWorks LLP,Business,357,320,0.9\\r\\nDL-10305,Straton Advisory,Business,287,200,0.7\\r\\nDL-10306,Straton Advisory,Growth,193,172,0.89\\r\\nDL-10307,LegalWorks LLP,Growth,475,431,0.91\\r\\nDL-10308,NovaEdge Consulting,Enterprise,455,358,0.79\\r\\nDL-10309,Fairbrooke Digital,Enterprise,13,11,0.85\\r\\nDL-10310,Straton Advisory,Growth,138,119,0.86\\r\\nDL-10311,Fairbrooke Digital,Business,407,341,0.84\\r\\nDL-10312,Straton Advisory,Enterprise,250,193,0.77\\r\\nDL-10313,Fairbrooke Digital,Growth,368,345,0.94\\r\\nDL-10314,Fairbrooke Digital,Growth,144,103,0.72\\r\\nDL-10315,NovaEdge Consulting,Business,308,231,0.75\\r\\nDL-10316,Straton Advisory,Business,397,313,0.79\\r\\nDL-10317,NovaEdge Consulting,Team,78,47,0.6\\r\\nDL-10318,Fairbrooke Digital,Growth,366,335,0.92\\r\\nDL-10319,Fairbrooke Digital,Business,43,36,0.84\\r\\nDL-10320,NovaEdge Consulting,Business,491,404,0.82\\r\\nDL-10321,Harper Finch Legal,Growth,192,159,0.83\\r\\nDL-10322,Fairbrooke Digital,Business,194,129,0.66\\r\\nDL-10323,Straton Advisory,Growth,313,255,0.81\\r\\nDL-10324,LegalWorks LLP,Enterprise,106,79,0.75\\r\\nDL-10325,Straton Advisory,Growth,305,277,0.91\\r\\nDL-10326,NovaEdge Consulting,Team,241,171,0.71\\r\\nDL-10327,Straton Advisory,Team,156,98,0.63\\r\\nDL-10328,LegalWorks LLP,Business,31,20,0.65\\r\\nDL-10329,LegalWorks LLP,Enterprise,94,78,0.83\\r\\nDL-10330,Harper Finch Legal,Business,421,356,0.85\\r\\nDL-10331,Fairbrooke Digital,Enterprise,46,36,0.78\\r\\nDL-10332,Fairbrooke Digital,Enterprise,370,325,0.88\\r\\nDL-10333,Straton Advisory,Enterprise,288,234,0.81\\r\\nDL-10334,Straton Advisory,Enterprise,49,38,0.78\\r\\nDL-10335,NovaEdge Consulting,Growth,17,14,0.82\\r\\nDL-10336,NovaEdge Consulting,Team,268,169,0.63\\r\\nDL-10337,Fairbrooke Digital,Team,234,177,0.76\\r\\nDL-10338,NovaEdge Consulting,Business,407,286,0.7\\r\\nDL-10339,Harper Finch Legal,Team,468,335,0.72\\r\\nDL-10340,LegalWorks LLP,Business,183,131,0.72\\r\\nDL-10341,NovaEdge Consulting,Team,173,120,0.69\\r\\nDL-10342,LegalWorks LLP,Business,487,361,0.74\\r\\nDL-10343,NovaEdge Consulting,Enterprise,382,288,0.75\\r\\nDL-10344,NovaEdge Consulting,Enterprise,366,306,0.84\\r\\nDL-10345,LegalWorks LLP,Business,212,163,0.77\\r\\nDL-10346,Straton Advisory,Growth,367,260,0.71\\r\\nDL-10347,NovaEdge Consulting,Team,9,5,0.56\\r\\nDL-10348,Harper Finch Legal,Business,114,91,0.8\\r\\nDL-10349,Fairbrooke Digital,Team,164,99,0.6\\r\\nDL-10350,NovaEdge Consulting,Growth,382,287,0.75\\r\\nDL-10351,LegalWorks LLP,Enterprise,270,223,0.83\\r\\nDL-10352,Harper Finch Legal,Team,291,225,0.77\\r\\nDL-10353,Fairbrooke Digital,Business,65,53,0.82\\r\\nDL-10354,Fairbrooke Digital,Growth,184,155,0.84\\r\\nDL-10355,LegalWorks LLP,Enterprise,109,94,0.86\\r\\nDL-10356,Harper Finch Legal,Business,492,326,0.66\\r\\nDL-10357,LegalWorks LLP,Team,128,100,0.78\\r\\nDL-10358,NovaEdge Consulting,Enterprise,200,152,0.76\\r\\nDL-10359,Fairbrooke Digital,Enterprise,256,250,0.98\\r\\nDL-10360,LegalWorks LLP,Enterprise,275,259,0.94\\r\\nDL-10361,LegalWorks LLP,Business,121,102,0.84\\r\\nDL-10362,LegalWorks LLP,Business,77,54,0.7\\r\\nDL-10363,NovaEdge Consulting,Enterprise,13,11,0.85\\r\\nDL-10364,Fairbrooke Digital,Business,394,320,0.81\\r\\nDL-10365,Harper Finch Legal,Team,499,337,0.68\\r\\nDL-10366,Harper Finch Legal,Team,142,110,0.77\\r\\nDL-10367,NovaEdge Consulting,Team,401,269,0.67\\r\\nDL-10368,Harper Finch Legal,Enterprise,124,105,0.85\\r\\nDL-10369,LegalWorks LLP,Team,80,59,0.74\\r\\nDL-10370,Fairbrooke Digital,Business,162,136,0.84\\r\\nDL-10371,Harper Finch Legal,Enterprise,406,343,0.84\\r\\nDL-10372,Fairbrooke Digital,Enterprise,75,60,0.8\\r\\nDL-10373,LegalWorks LLP,Growth,344,321,0.93\\r\\nDL-10374,NovaEdge Consulting,Enterprise,220,168,0.76\\r\\nDL-10375,NovaEdge Consulting,Team,388,303,0.78\\r\\nDL-10376,Fairbrooke Digital,Business,201,145,0.72\\r\\nDL-10377,LegalWorks LLP,Growth,375,322,0.86\\r\\nDL-10378,LegalWorks LLP,Team,177,117,0.66\\r\\nDL-10379,NovaEdge Consulting,Growth,419,304,0.73\\r\\nDL-10380,Fairbrooke Digital,Team,446,298,0.67\\r\\nDL-10381,Straton Advisory,Business,22,19,0.86\\r\\nDL-10382,Fairbrooke Digital,Growth,474,348,0.73\\r\\nDL-10383,Fairbrooke Digital,Growth,341,248,0.73\\r\\nDL-10384,Straton Advisory,Team,236,166,0.7\\r\\nDL-10385,LegalWorks LLP,Enterprise,162,142,0.88\\r\\nDL-10386,NovaEdge Consulting,Business,58,40,0.69\\r\\nDL-10387,Straton Advisory,Growth,49,38,0.78\\r\\nDL-10388,Fairbrooke Digital,Business,312,212,0.68\\r\\nDL-10389,NovaEdge Consulting,Enterprise,168,159,0.95\\r\\nDL-10390,Harper Finch Legal,Team,361,271,0.75\\r\\nDL-10391,Fairbrooke Digital,Business,168,142,0.85\\r\\nDL-10392,Straton Advisory,Growth,385,349,0.91\\r\\nDL-10393,Fairbrooke Digital,Enterprise,448,415,0.93\\r\\nDL-10394,Fairbrooke Digital,Team,206,155,0.75\\r\\nDL-10395,Harper Finch Legal,Business,341,225,0.66\\r\\nDL-10396,NovaEdge Consulting,Enterprise,50,46,0.92\\r\\nDL-10397,Straton Advisory,Team,410,254,0.62\\r\\nDL-10398,Straton Advisory,Team,11,7,0.64\\r\\nDL-10399,Straton Advisory,Growth,11,7,0.64\\r\\nDL-10400,Straton Advisory,Enterprise,386,343,0.89\\r\\nDL-10401,LegalWorks LLP,Team,63,38,0.6\\r\\nDL-10402,NovaEdge Consulting,Team,147,89,0.61\\r\\nDL-10403,LegalWorks LLP,Enterprise,481,424,0.88\\r\\nDL-10404,Straton Advisory,Team,80,54,0.68\\r\\nDL-10405,Straton Advisory,Growth,318,224,0.7\\r\\nDL-10406,LegalWorks LLP,Team,263,162,0.62\\r\\nDL-10407,Harper Finch Legal,Enterprise,290,262,0.9\\r\\nDL-10408,LegalWorks LLP,Business,498,412,0.83\\r\\nDL-10409,LegalWorks LLP,Enterprise,258,202,0.78\\r\\nDL-10410,Fairbrooke Digital,Business,92,60,0.65\\r\\nDL-10411,LegalWorks LLP,Enterprise,359,285,0.79\\r\\nDL-10412,NovaEdge Consulting,Business,482,384,0.8\\r\\nDL-10413,Straton Advisory,Enterprise,418,323,0.77\\r\\nDL-10414,LegalWorks LLP,Business,158,141,0.89\\r\\nDL-10415,NovaEdge Consulting,Team,73,53,0.73\\r\\nDL-10416,Fairbrooke Digital,Team,238,148,0.62\\r\\nDL-10417,NovaEdge Consulting,Business,126,103,0.82\\r\\nDL-10418,Fairbrooke Digital,Enterprise,130,120,0.92\\r\\nDL-10419,NovaEdge Consulting,Enterprise,423,357,0.84\\r\\nDL-10420,NovaEdge Consulting,Growth,453,390,0.86\\r\\nDL-10421,NovaEdge Consulting,Growth,191,158,0.83\\r\\nDL-10422,NovaEdge Consulting,Enterprise,273,225,0.82\\r\\nDL-10423,Fairbrooke Digital,Growth,463,392,0.85\\r\\nDL-10424,LegalWorks LLP,Team,205,162,0.79\\r\\nDL-10425,Harper Finch Legal,Enterprise,415,341,0.82\\r\\nDL-10426,Harper Finch Legal,Business,45,35,0.78\\r\\nDL-10427,Harper Finch Legal,Growth,162,128,0.79\\r\\nDL-10428,Harper Finch Legal,Enterprise,330,293,0.89\\r\\nDL-10429,Harper Finch Legal,Team,386,303,0.78\\r\\nDL-10430,Fairbrooke Digital,Growth,247,197,0.8\\r\\nDL-10431,Straton Advisory,Growth,310,273,0.88\\r\\nDL-10432,Straton Advisory,Business,229,204,0.89\\r\\nDL-10433,Straton Advisory,Growth,234,172,0.74\\r\\nDL-10434,NovaEdge Consulting,Growth,177,128,0.72\\r\\nDL-10435,Fairbrooke Digital,Business,205,171,0.83\\r\\nDL-10436,NovaEdge Consulting,Business,149,101,0.68\\r\\nDL-10437,NovaEdge Consulting,Enterprise,221,183,0.83\\r\\nDL-10438,Straton Advisory,Business,252,198,0.79\\r\\nDL-10439,Harper Finch Legal,Team,301,224,0.74\\r\\nDL-10440,NovaEdge Consulting,Enterprise,406,335,0.83\\r\\nDL-10441,Straton Advisory,Enterprise,113,90,0.8\\r\\nDL-10442,Straton Advisory,Enterprise,422,317,0.75\\r\\nDL-10443,NovaEdge Consulting,Business,172,130,0.76\\r\\nDL-10444,NovaEdge Consulting,Business,37,28,0.76\\r\\nDL-10445,NovaEdge Consulting,Team,257,183,0.71\\r\\nDL-10446,Straton Advisory,Enterprise,355,269,0.76\\r\\nDL-10447,LegalWorks LLP,Enterprise,86,84,0.98\\r\\nDL-10448,Harper Finch Legal,Enterprise,214,183,0.86\\r\\nDL-10449,Fairbrooke Digital,Team,427,298,0.7\\r\\nDL-10450,Harper Finch Legal,Business,219,151,0.69\\r\\nDL-10451,Fairbrooke Digital,Team,446,369,0.83\\r\\nDL-10452,NovaEdge Consulting,Enterprise,466,355,0.76\\r\\nDL-10453,Fairbrooke Digital,Enterprise,402,383,0.95\\r\\nDL-10454,Harper Finch Legal,Team,103,63,0.61\\r\\nDL-10455,Straton Advisory,Business,232,174,0.75\\r\\nDL-10456,Fairbrooke Digital,Business,166,144,0.87\\r\\nDL-10457,LegalWorks LLP,Enterprise,98,88,0.9\\r\\nDL-10458,Harper Finch Legal,Team,212,140,0.66\\r\\nDL-10459,Harper Finch Legal,Growth,292,272,0.93\\r\\nDL-10460,Straton Advisory,Business,278,239,0.86\\r\\nDL-10461,Harper Finch Legal,Business,294,232,0.79\\r\\nDL-10462,Harper Finch Legal,Team,339,203,0.6\\r\\nDL-10463,Straton Advisory,Growth,322,231,0.72\\r\\nDL-10464,Fairbrooke Digital,Business,44,37,0.84\\r\\nDL-10465,LegalWorks LLP,Enterprise,104,87,0.84\\r\\nDL-10466,LegalWorks LLP,Enterprise,29,25,0.86\\r\\nDL-10467,NovaEdge Consulting,Business,333,282,0.85\\r\\nDL-10468,LegalWorks LLP,Growth,349,263,0.75\\r\\nDL-10469,Harper Finch Legal,Team,401,291,0.73\\r\\nDL-10470,NovaEdge Consulting,Team,273,215,0.79\\r\\nDL-10471,NovaEdge Consulting,Team,21,16,0.76\\r\\nDL-10472,LegalWorks LLP,Team,143,119,0.83\\r\\nDL-10473,NovaEdge Consulting,Business,109,95,0.87\\r\\nDL-10474,Fairbrooke Digital,Team,29,20,0.69\\r\\nDL-10475,LegalWorks LLP,Business,205,143,0.7\\r\\nDL-10476,Straton Advisory,Team,260,168,0.65\\r\\nDL-10477,Straton Advisory,Enterprise,171,133,0.78\\r\\nDL-10478,Straton Advisory,Team,339,249,0.73\\r\\nDL-10479,Straton Advisory,Business,283,184,0.65\\r\\nDL-10480,LegalWorks LLP,Growth,369,308,0.83\\r\\nDL-10481,LegalWorks LLP,Growth,126,92,0.73\\r\\nDL-10482,NovaEdge Consulting,Business,36,29,0.81\\r\\nDL-10483,Fairbrooke Digital,Enterprise,269,204,0.76\\r\\nDL-10484,Harper Finch Legal,Enterprise,452,380,0.84\\r\\nDL-10485,Harper Finch Legal,Enterprise,454,393,0.87\\r\\nDL-10486,Fairbrooke Digital,Team,153,101,0.66\\r\\nDL-10487,Harper Finch Legal,Business,37,24,0.65\\r\\nDL-10488,Straton Advisory,Team,439,365,0.83\\r\\nDL-10489,Fairbrooke Digital,Growth,61,47,0.77\\r\\nDL-10490,Harper Finch Legal,Enterprise,68,65,0.96\\r\\nDL-10491,LegalWorks LLP,Enterprise,193,149,0.77\\r\\nDL-10492,Fairbrooke Digital,Team,310,203,0.65\\r\\nDL-10493,Straton Advisory,Team,358,249,0.7\\r\\nDL-10494,NovaEdge Consulting,Team,463,349,0.75\\r\\nDL-10495,LegalWorks LLP,Growth,464,427,0.92\\r\\nDL-10496,Straton Advisory,Business,381,341,0.9\\r\\nDL-10497,Straton Advisory,Business,340,283,0.83\\r\\nDL-10498,Fairbrooke Digital,Growth,146,108,0.74\\r\\nDL-10499,Harper Finch Legal,Team,319,196,0.61\\r\\nDL-10500,Fairbrooke Digital,Team,67,45,0.67\\r\\nDL-10501,Fairbrooke Digital,Team,16,11,0.69\\r\\nDL-10502,Harper Finch Legal,Business,287,191,0.67\\r\\nDL-10503,NovaEdge Consulting,Enterprise,184,141,0.77\\r\\nDL-10504,NovaEdge Consulting,Growth,35,29,0.83\\r\\nDL-10505,Fairbrooke Digital,Enterprise,458,386,0.84\\r\\nDL-10506,NovaEdge Consulting,Team,490,332,0.68\\r\\nDL-10507,Harper Finch Legal,Growth,455,355,0.78\\r\\nDL-10508,Fairbrooke Digital,Growth,401,307,0.77\\r\\nDL-10509,Straton Advisory,Team,108,71,0.66\\r\\nDL-10510,Straton Advisory,Growth,422,346,0.82\\r\\nDL-10511,Harper Finch Legal,Business,34,26,0.76\\r\\nDL-10512,Straton Advisory,Team,479,323,0.67\\r\\nDL-10513,Straton Advisory,Team,323,265,0.82\\r\\nDL-10514,LegalWorks LLP,Enterprise,345,273,0.79\\r\\nDL-10515,LegalWorks LLP,Business,10,6,0.6\\r\\nDL-10516,NovaEdge Consulting,Business,237,189,0.8\\r\\nDL-10517,Straton Advisory,Growth,395,368,0.93\\r\\nDL-10518,Fairbrooke Digital,Business,123,82,0.67\\r\\nDL-10519,Fairbrooke Digital,Team,314,247,0.79\\r\\nDL-10520,Straton Advisory,Enterprise,144,139,0.97\\r\\nDL-10521,Fairbrooke Digital,Team,247,185,0.75\\r\\nDL-10522,LegalWorks LLP,Growth,411,333,0.81\\r\\nDL-10523,Fairbrooke Digital,Enterprise,212,192,0.91\\r\\nDL-10524,NovaEdge Consulting,Enterprise,151,141,0.93\\r\\nDL-10525,Harper Finch Legal,Team,305,199,0.65\\r\\nDL-10526,NovaEdge Consulting,Team,383,325,0.85\\r\\nDL-10527,Fairbrooke Digital,Enterprise,116,97,0.84\\r\\nDL-10528,Fairbrooke Digital,Growth,317,229,0.72\\r\\nDL-10529,Harper Finch Legal,Business,380,297,0.78\\r\\nDL-10530,Fairbrooke Digital,Business,19,12,0.63\\r\\nDL-10531,NovaEdge Consulting,Enterprise,369,344,0.93\\r\\nDL-10532,LegalWorks LLP,Business,497,385,0.77\\r\\nDL-10533,Fairbrooke Digital,Growth,374,264,0.71\\r\\nDL-10534,LegalWorks LLP,Growth,58,47,0.81\\r\\nDL-10535,Fairbrooke Digital,Team,493,399,0.81\\r\\nDL-10536,Straton Advisory,Business,326,251,0.77\\r\\nDL-10537,LegalWorks LLP,Business,432,324,0.75\\r\\nDL-10538,LegalWorks LLP,Business,213,145,0.68\\r\\nDL-10539,LegalWorks LLP,Enterprise,233,199,0.85\\r\\nDL-10540,NovaEdge Consulting,Team,102,63,0.62\\r\\nDL-10541,NovaEdge Consulting,Business,318,222,0.7\\r\\nDL-10542,Harper Finch Legal,Growth,77,69,0.9\\r\\nDL-10543,Fairbrooke Digital,Enterprise,142,137,0.96\\r\\nDL-10544,Harper Finch Legal,Growth,18,16,0.89\\r\\nDL-10545,Harper Finch Legal,Team,241,162,0.67\\r\\nDL-10546,Fairbrooke Digital,Business,15,11,0.73\\r\\nDL-10547,Straton Advisory,Team,164,112,0.68\\r\\nDL-10548,NovaEdge Consulting,Enterprise,238,225,0.95\\r\\nDL-10549,NovaEdge Consulting,Business,194,169,0.87\\r\\nDL-10550,Straton Advisory,Enterprise,303,265,0.87\\r\\nDL-10551,LegalWorks LLP,Team,217,169,0.78\\r\\nDL-10552,Fairbrooke Digital,Business,151,129,0.85\\r\\nDL-10553,Fairbrooke Digital,Team,370,267,0.72\\r\\nDL-10554,Fairbrooke Digital,Growth,272,232,0.85\\r\\nDL-10555,Straton Advisory,Business,35,26,0.74\\r\\nDL-10556,Fairbrooke Digital,Business,114,88,0.77\\r\\nDL-10557,Harper Finch Legal,Business,441,391,0.89\\r\\nDL-10558,Fairbrooke Digital,Growth,205,187,0.91\\r\\nDL-10559,Fairbrooke Digital,Growth,109,84,0.77\\r\\nDL-10560,LegalWorks LLP,Growth,463,432,0.93\\r\\nDL-10561,Fairbrooke Digital,Business,283,217,0.77\\r\\nDL-10562,LegalWorks LLP,Team,125,75,0.6\\r\\nDL-10563,NovaEdge Consulting,Enterprise,353,330,0.93\\r\\nDL-10564,Fairbrooke Digital,Team,492,371,0.75\\r\\nDL-10565,LegalWorks LLP,Enterprise,428,395,0.92\\r\\nDL-10566,NovaEdge Consulting,Team,14,10,0.71\\r\\nDL-10567,NovaEdge Consulting,Enterprise,282,245,0.87\\r\\nDL-10568,Fairbrooke Digital,Enterprise,6,4,0.67\\r\\nDL-10569,NovaEdge Consulting,Team,51,42,0.82\\r\\nDL-10570,Harper Finch Legal,Team,118,95,0.81\\r\\nDL-10571,Fairbrooke Digital,Growth,432,402,0.93\\r\\nDL-10572,Straton Advisory,Enterprise,324,293,0.9\\r\\nDL-10573,Harper Finch Legal,Growth,61,46,0.75\\r\\nDL-10574,Straton Advisory,Growth,456,403,0.88\\r\\nDL-10575,NovaEdge Consulting,Business,174,117,0.67\\r\\nDL-10576,LegalWorks LLP,Team,196,164,0.84\\r\\nDL-10577,Fairbrooke Digital,Growth,451,400,0.89\\r\\nDL-10578,Fairbrooke Digital,Team,420,350,0.83\\r\\nDL-10579,Fairbrooke Digital,Team,345,243,0.7\\r\\nDL-10580,NovaEdge Consulting,Business,472,369,0.78\\r\\nDL-10581,Harper Finch Legal,Enterprise,52,45,0.87\\r\\nDL-10582,Harper Finch Legal,Business,377,274,0.73\\r\\nDL-10583,Harper Finch Legal,Enterprise,191,177,0.93\\r\\nDL-10584,Fairbrooke Digital,Business,317,242,0.76\\r\\nDL-10585,Harper Finch Legal,Business,386,305,0.79\\r\\nDL-10586,NovaEdge Consulting,Business,191,147,0.77\\r\\nDL-10587,Straton Advisory,Growth,188,154,0.82\\r\\nDL-10588,NovaEdge Consulting,Enterprise,358,333,0.93\\r\\nDL-10589,LegalWorks LLP,Enterprise,271,222,0.82\\r\\nDL-10590,NovaEdge Consulting,Growth,336,241,0.72\\r\\nDL-10591,Harper Finch Legal,Growth,262,223,0.85\\r\\nDL-10592,Fairbrooke Digital,Growth,128,110,0.86\\r\\nDL-10593,Fairbrooke Digital,Enterprise,28,27,0.96\\r\\nDL-10594,LegalWorks LLP,Business,395,325,0.82\\r\\nDL-10595,NovaEdge Consulting,Growth,444,355,0.8\\r\\nDL-10596,Fairbrooke Digital,Business,184,135,0.73\\r\\nDL-10597,NovaEdge Consulting,Enterprise,190,143,0.75\\r\\nDL-10598,Straton Advisory,Growth,123,113,0.92\\r\\nDL-10599,NovaEdge Consulting,Business,106,75,0.71\\r\\nDL-10600,LegalWorks LLP,Business,46,32,0.7\\r\\nDL-10601,Fairbrooke Digital,Growth,467,439,0.94\\r\\nDL-10602,Straton Advisory,Team,356,247,0.69\\r\\nDL-10603,Harper Finch Legal,Business,302,245,0.81\\r\\nDL-10604,Harper Finch Legal,Team,111,74,0.67\\r\\nDL-10605,Fairbrooke Digital,Growth,466,410,0.88\\r\\nDL-10606,Fairbrooke Digital,Team,429,297,0.69\\r\\nDL-10607,LegalWorks LLP,Enterprise,25,19,0.76\\r\\nDL-10608,Fairbrooke Digital,Growth,321,226,0.7\\r\\nDL-10609,Straton Advisory,Enterprise,321,295,0.92\\r\\nDL-10610,Straton Advisory,Team,47,30,0.64\\r\\nDL-10611,NovaEdge Consulting,Growth,372,263,0.71\\r\\nDL-10612,Harper Finch Legal,Growth,459,369,0.8\\r\\nDL-10613,Fairbrooke Digital,Business,194,146,0.75\\r\\nDL-10614,Straton Advisory,Team,116,96,0.83\\r\\nDL-10615,Straton Advisory,Business,384,251,0.65\\r\\nDL-10616,Fairbrooke Digital,Growth,269,217,0.81\\r\\nDL-10617,Straton Advisory,Team,308,244,0.79\\r\\nDL-10618,NovaEdge Consulting,Growth,20,17,0.85\\r\\nDL-10619,Straton Advisory,Growth,133,108,0.81\\r\\nDL-10620,LegalWorks LLP,Team,339,244,0.72\\r\\nDL-10621,Fairbrooke Digital,Business,76,58,0.76\\r\\nDL-10622,Fairbrooke Digital,Enterprise,50,43,0.86\\r\\nDL-10623,Harper Finch Legal,Business,172,154,0.9\\r\\nDL-10624,Straton Advisory,Business,99,81,0.82\\r\\nDL-10625,Fairbrooke Digital,Team,83,59,0.71\\r\\nDL-10626,Harper Finch Legal,Team,481,353,0.73\\r\\nDL-10627,LegalWorks LLP,Business,69,58,0.84\\r\\nDL-10628,Straton Advisory,Team,460,285,0.62\\r\\nDL-10629,Harper Finch Legal,Growth,324,279,0.86\\r\\nDL-10630,Harper Finch Legal,Business,327,260,0.8\\r\\nDL-10631,LegalWorks LLP,Enterprise,400,345,0.86\\r\\nDL-10632,Fairbrooke Digital,Business,54,38,0.7\\r\\nDL-10633,LegalWorks LLP,Business,194,172,0.89\\r\\nDL-10634,Harper Finch Legal,Team,288,216,0.75\\r\\nDL-10635,Straton Advisory,Enterprise,189,149,0.79\\r\\nDL-10636,Straton Advisory,Growth,117,101,0.86\\r\\nDL-10637,Straton Advisory,Growth,393,329,0.84\\r\\nDL-10638,NovaEdge Consulting,Enterprise,421,364,0.86\\r\\nDL-10639,Fairbrooke Digital,Enterprise,61,47,0.77\\r\\nDL-10640,Fairbrooke Digital,Growth,99,85,0.86\\r\\nDL-10641,LegalWorks LLP,Team,27,18,0.67\\r\\nDL-10642,LegalWorks LLP,Enterprise,244,211,0.86\\r\\nDL-10643,Fairbrooke Digital,Business,263,191,0.73\\r\\nDL-10644,Fairbrooke Digital,Enterprise,410,371,0.9\\r\\nDL-10645,NovaEdge Consulting,Enterprise,291,244,0.84\\r\\nDL-10646,Fairbrooke Digital,Business,477,414,0.87\\r\\nDL-10647,Straton Advisory,Growth,88,83,0.94\\r\\nDL-10648,LegalWorks LLP,Enterprise,131,107,0.82\\r\\nDL-10649,Harper Finch Legal,Growth,487,429,0.88\\r\\nDL-10650,Harper Finch Legal,Team,98,81,0.83\\r\\nDL-10651,NovaEdge Consulting,Team,415,262,0.63\\r\\nDL-10652,LegalWorks LLP,Growth,164,138,0.84\\r\\nDL-10653,Fairbrooke Digital,Growth,77,56,0.73\\r\\nDL-10654,Harper Finch Legal,Business,349,281,0.81\\r\\nDL-10655,Straton Advisory,Growth,257,215,0.84\\r\\nDL-10656,Straton Advisory,Business,446,343,0.77\\r\\nDL-10657,NovaEdge Consulting,Enterprise,43,32,0.74\\r\\nDL-10658,Fairbrooke Digital,Enterprise,92,80,0.87\\r\\nDL-10659,Straton Advisory,Growth,173,143,0.83\\r\\nDL-10660,Harper Finch Legal,Growth,479,446,0.93\\r\\nDL-10661,NovaEdge Consulting,Growth,40,31,0.78\\r\\nDL-10662,LegalWorks LLP,Business,88,72,0.82\\r\\nDL-10663,Fairbrooke Digital,Business,487,430,0.88\\r\\nDL-10664,NovaEdge Consulting,Team,341,219,0.64\\r\\nDL-10665,NovaEdge Consulting,Team,110,66,0.6\\r\\nDL-10666,LegalWorks LLP,Team,424,289,0.68\\r\\nDL-10667,Harper Finch Legal,Business,143,114,0.8\\r\\nDL-10668,Harper Finch Legal,Team,137,95,0.69\\r\\nDL-10669,Fairbrooke Digital,Enterprise,247,205,0.83\\r\\nDL-10670,NovaEdge Consulting,Team,52,36,0.69\\r\\nDL-10671,LegalWorks LLP,Growth,364,269,0.74\\r\\nDL-10672,Straton Advisory,Growth,274,248,0.91\\r\\nDL-10673,Fairbrooke Digital,Growth,286,225,0.79\\r\\nDL-10674,Straton Advisory,Business,158,130,0.82\\r\\nDL-10675,LegalWorks LLP,Business,497,439,0.88\\r\\nDL-10676,Straton Advisory,Business,291,189,0.65\\r\\nDL-10677,Straton Advisory,Team,150,109,0.73\\r\\nDL-10678,LegalWorks LLP,Team,282,210,0.74\\r\\nDL-10679,LegalWorks LLP,Enterprise,210,192,0.91\\r\\nDL-10680,NovaEdge Consulting,Business,92,82,0.89\\r\\nDL-10681,Harper Finch Legal,Growth,313,223,0.71\\r\\nDL-10682,NovaEdge Consulting,Team,457,387,0.85\\r\\nDL-10683,Harper Finch Legal,Business,123,80,0.65\\r\\nDL-10684,Fairbrooke Digital,Enterprise,74,62,0.84\\r\\nDL-10685,Straton Advisory,Team,183,116,0.63\\r\\nDL-10686,Straton Advisory,Business,102,88,0.86\\r\\nDL-10687,Straton Advisory,Business,365,317,0.87\\r\\nDL-10688,LegalWorks LLP,Team,201,142,0.71\\r\\nDL-10689,Straton Advisory,Enterprise,14,12,0.86\\r\\nDL-10690,Straton Advisory,Team,12,7,0.58\\r\\nDL-10691,Straton Advisory,Business,59,42,0.71\\r\\nDL-10692,Harper Finch Legal,Growth,150,142,0.95\\r\\nDL-10693,NovaEdge Consulting,Team,211,126,0.6\\r\\nDL-10694,LegalWorks LLP,Team,317,259,0.82\\r\\nDL-10695,NovaEdge Consulting,Enterprise,26,23,0.88\\r\\nDL-10696,LegalWorks LLP,Business,316,259,0.82\\r\\nDL-10697,Straton Advisory,Growth,478,387,0.81\\r\\nDL-10698,LegalWorks LLP,Business,335,238,0.71\\r\\nDL-10699,Harper Finch Legal,Team,211,160,0.76\\r\\nDL-10700,Fairbrooke Digital,Team,491,315,0.64\\r\\nDL-10701,Straton Advisory,Growth,352,270,0.77\\r\\nDL-10702,Harper Finch Legal,Business,334,296,0.89\\r\\nDL-10703,Straton Advisory,Business,237,195,0.82\\r\\nDL-10704,LegalWorks LLP,Enterprise,369,316,0.86\\r\\nDL-10705,Harper Finch Legal,Team,299,189,0.63\\r\\nDL-10706,Fairbrooke Digital,Business,240,211,0.88\\r\\nDL-10707,Harper Finch Legal,Team,171,114,0.67\\r\\nDL-10708,NovaEdge Consulting,Growth,252,226,0.9\\r\\nDL-10709,NovaEdge Consulting,Team,254,209,0.82\\r\\nDL-10710,NovaEdge Consulting,Enterprise,227,193,0.85\\r\\nDL-10711,NovaEdge Consulting,Enterprise,63,54,0.86\\r\\nDL-10712,LegalWorks LLP,Business,138,122,0.88\\r\\nDL-10713,NovaEdge Consulting,Business,178,154,0.87\\r\\nDL-10714,Harper Finch Legal,Team,333,272,0.82\\r\\nDL-10715,NovaEdge Consulting,Business,140,102,0.73\\r\\nDL-10716,LegalWorks LLP,Growth,132,107,0.81\\r\\nDL-10717,NovaEdge Consulting,Growth,155,118,0.76\\r\\nDL-10718,NovaEdge Consulting,Growth,114,86,0.75\\r\\nDL-10719,Harper Finch Legal,Enterprise,225,217,0.96\\r\\nDL-10720,NovaEdge Consulting,Team,357,266,0.75\\r\\nDL-10721,Harper Finch Legal,Business,473,331,0.7\\r\\nDL-10722,Fairbrooke Digital,Business,392,349,0.89\\r\\nDL-10723,Fairbrooke Digital,Team,65,41,0.63\\r\\nDL-10724,Harper Finch Legal,Growth,97,74,0.76\\r\\nDL-10725,Straton Advisory,Growth,62,57,0.92\\r\\nDL-10726,Straton Advisory,Team,207,144,0.7\\r\\nDL-10727,LegalWorks LLP,Team,451,334,0.74\\r\\nDL-10728,Harper Finch Legal,Business,121,83,0.69\\r\\nDL-10729,Harper Finch Legal,Growth,10,9,0.9\\r\\nDL-10730,NovaEdge Consulting,Team,123,95,0.77\\r\\nDL-10731,Fairbrooke Digital,Growth,422,390,0.92\\r\\nDL-10732,Harper Finch Legal,Business,477,379,0.79\\r\\nDL-10733,NovaEdge Consulting,Growth,207,151,0.73\\r\\nDL-10734,Straton Advisory,Business,311,223,0.72\\r\\nDL-10735,Straton Advisory,Business,179,126,0.7\\r\\nDL-10736,Harper Finch Legal,Growth,98,80,0.82\\r\\nDL-10737,Fairbrooke Digital,Team,65,40,0.62\\r\\nDL-10738,Harper Finch Legal,Business,232,188,0.81\\r\\nDL-10739,NovaEdge Consulting,Business,337,300,0.89\\r\\nDL-10740,NovaEdge Consulting,Growth,377,330,0.88\\r\\nDL-10741,LegalWorks LLP,Team,70,48,0.69\\r\\nDL-10742,Fairbrooke Digital,Enterprise,186,177,0.95\\r\\nDL-10743,Straton Advisory,Team,288,228,0.79\\r\\nDL-10744,NovaEdge Consulting,Business,490,326,0.67\\r\\nDL-10745,Harper Finch Legal,Enterprise,16,12,0.75\\r\\nDL-10746,NovaEdge Consulting,Team,50,37,0.74\\r\\nDL-10747,Straton Advisory,Growth,404,301,0.75\\r\\nDL-10748,NovaEdge Consulting,Team,311,217,0.7\\r\\nDL-10749,LegalWorks LLP,Team,145,99,0.68\\r\\nDL-10750,Fairbrooke Digital,Enterprise,87,69,0.79\\r\\nDL-10751,NovaEdge Consulting,Growth,343,271,0.79\\r\\nDL-10752,Harper Finch Legal,Team,321,231,0.72\\r\\nDL-10753,NovaEdge Consulting,Team,414,271,0.65\\r\\nDL-10754,LegalWorks LLP,Team,497,304,0.61\\r\\nDL-10755,LegalWorks LLP,Business,487,371,0.76\\r\\nDL-10756,Straton Advisory,Business,481,364,0.76\\r\\nDL-10757,NovaEdge Consulting,Team,261,157,0.6\\r\\nDL-10758,LegalWorks LLP,Enterprise,141,127,0.9\\r\\nDL-10759,Harper Finch Legal,Growth,473,410,0.87\\r\\nDL-10760,NovaEdge Consulting,Growth,209,147,0.7\\r\\nDL-10761,Fairbrooke Digital,Enterprise,371,362,0.98\\r\\nDL-10762,NovaEdge Consulting,Enterprise,263,244,0.93\\r\\nDL-10763,Fairbrooke Digital,Enterprise,50,37,0.74\\r\\nDL-10764,NovaEdge Consulting,Enterprise,122,111,0.91\\r\\nDL-10765,LegalWorks LLP,Enterprise,333,288,0.86\\r\\nDL-10766,Harper Finch Legal,Growth,415,333,0.8\\r\\nDL-10767,LegalWorks LLP,Business,63,47,0.75\\r\\nDL-10768,Harper Finch Legal,Growth,231,214,0.93\\r\\nDL-10769,Fairbrooke Digital,Enterprise,447,371,0.83\\r\\nDL-10770,Harper Finch Legal,Growth,417,344,0.82\\r\\nDL-10771,NovaEdge Consulting,Enterprise,485,432,0.89\\r\\nDL-10772,Straton Advisory,Growth,175,163,0.93\\r\\nDL-10773,LegalWorks LLP,Enterprise,358,289,0.81\\r\\nDL-10774,Harper Finch Legal,Team,217,145,0.67\\r\\nDL-10775,Fairbrooke Digital,Growth,455,431,0.95\\r\\nDL-10776,LegalWorks LLP,Business,269,195,0.72\\r\\nDL-10777,LegalWorks LLP,Growth,164,132,0.8\\r\\nDL-10778,Fairbrooke Digital,Business,158,105,0.66\\r\\nDL-10779,Fairbrooke Digital,Team,199,160,0.8\\r\\nDL-10780,Straton Advisory,Growth,177,156,0.88\\r\\nDL-10781,Straton Advisory,Business,256,210,0.82\\r\\nDL-10782,LegalWorks LLP,Growth,403,311,0.77\\r\\nDL-10783,Fairbrooke Digital,Business,381,308,0.81\\r\\nDL-10784,Straton Advisory,Business,353,281,0.8\\r\\nDL-10785,LegalWorks LLP,Business,301,246,0.82\\r\\nDL-10786,Harper Finch Legal,Team,406,340,0.84\\r\\nDL-10787,LegalWorks LLP,Team,241,185,0.77\\r\\nDL-10788,NovaEdge Consulting,Business,116,85,0.73\\r\\nDL-10789,Harper Finch Legal,Business,138,113,0.82\\r\\nDL-10790,Straton Advisory,Team,400,266,0.66\\r\\nDL-10791,Harper Finch Legal,Growth,284,201,0.71\\r\\nDL-10792,Fairbrooke Digital,Enterprise,216,188,0.87\\r\\nDL-10793,Fairbrooke Digital,Enterprise,339,323,0.95\\r\\nDL-10794,Straton Advisory,Business,90,80,0.89\\r\\nDL-10795,LegalWorks LLP,Team,360,257,0.71\\r\\nDL-10796,Fairbrooke Digital,Business,364,271,0.74\\r\\nDL-10797,NovaEdge Consulting,Business,282,222,0.79\\r\\nDL-10798,Harper Finch Legal,Team,61,44,0.72\\r\\nDL-10799,Harper Finch Legal,Enterprise,285,245,0.86\\r\\nDL-10800,LegalWorks LLP,Team,359,265,0.74\\r\\nDL-10801,Fairbrooke Digital,Team,173,105,0.61\\r\\nDL-10802,Fairbrooke Digital,Growth,401,360,0.9\\r\\nDL-10803,NovaEdge Consulting,Team,18,14,0.78\\r\\nDL-10804,NovaEdge Consulting,Team,17,13,0.76\\r\\nDL-10805,NovaEdge Consulting,Business,333,233,0.7\\r\\nDL-10806,Harper Finch Legal,Business,424,352,0.83\\r\\nDL-10807,Harper Finch Legal,Growth,222,190,0.86\\r\\nDL-10808,Harper Finch Legal,Growth,467,442,0.95\\r\\nDL-10809,NovaEdge Consulting,Enterprise,462,420,0.91\\r\\nDL-10810,Harper Finch Legal,Enterprise,230,215,0.93\\r\\nDL-10811,Straton Advisory,Enterprise,341,310,0.91\\r\\nDL-10812,NovaEdge Consulting,Team,268,217,0.81\\r\\nDL-10813,Straton Advisory,Team,166,100,0.6\\r\\nDL-10814,Harper Finch Legal,Business,457,357,0.78\\r\\nDL-10815,Fairbrooke Digital,Enterprise,302,230,0.76\\r\\nDL-10816,Fairbrooke Digital,Business,253,190,0.75\\r\\nDL-10817,NovaEdge Consulting,Business,258,169,0.66\\r\\nDL-10818,NovaEdge Consulting,Team,386,292,0.76\\r\\nDL-10819,LegalWorks LLP,Growth,283,267,0.94\\r\\nDL-10820,Straton Advisory,Team,204,156,0.76\\r\\nDL-10821,Harper Finch Legal,Growth,197,153,0.78\\r\\nDL-10822,Straton Advisory,Enterprise,434,397,0.91\\r\\nDL-10823,LegalWorks LLP,Enterprise,341,309,0.91\\r\\nDL-10824,NovaEdge Consulting,Business,439,316,0.72\\r\\nDL-10825,LegalWorks LLP,Team,299,247,0.83\\r\\nDL-10826,Harper Finch Legal,Team,80,54,0.68\\r\\nDL-10827,LegalWorks LLP,Team,257,180,0.7\\r\\nDL-10828,LegalWorks LLP,Business,376,311,0.83\\r\\nDL-10829,Straton Advisory,Team,63,42,0.67\\r\\nDL-10830,Straton Advisory,Business,161,143,0.89\\r\\nDL-10831,LegalWorks LLP,Business,176,130,0.74\\r\\nDL-10832,Straton Advisory,Enterprise,33,30,0.91\\r\\nDL-10833,LegalWorks LLP,Growth,155,115,0.74\\r\\nDL-10834,Harper Finch Legal,Enterprise,458,348,0.76\\r\\nDL-10835,Harper Finch Legal,Enterprise,154,135,0.88\\r\\nDL-10836,Fairbrooke Digital,Business,117,77,0.66\\r\\nDL-10837,LegalWorks LLP,Business,279,244,0.87\\r\\nDL-10838,LegalWorks LLP,Enterprise,397,314,0.79\\r\\nDL-10839,Straton Advisory,Enterprise,439,408,0.93\\r\\nDL-10840,Straton Advisory,Growth,374,294,0.79\\r\\nDL-10841,NovaEdge Consulting,Team,394,316,0.8\\r\\nDL-10842,LegalWorks LLP,Enterprise,35,32,0.91\\r\\nDL-10843,LegalWorks LLP,Growth,207,196,0.95\\r\\nDL-10844,Straton Advisory,Business,332,248,0.75\\r\\nDL-10845,Fairbrooke Digital,Growth,476,337,0.71\\r\\nDL-10846,Straton Advisory,Enterprise,158,129,0.82\\r\\nDL-10847,Fairbrooke Digital,Business,383,326,0.85\\r\\nDL-10848,Fairbrooke Digital,Team,326,261,0.8\\r\\nDL-10849,Harper Finch Legal,Enterprise,205,171,0.83\\r\\nDL-10850,Harper Finch Legal,Business,166,144,0.87\\r\\nDL-10851,LegalWorks LLP,Team,497,418,0.84\\r\\nDL-10852,Straton Advisory,Growth,83,69,0.83\\r\\nDL-10853,LegalWorks LLP,Enterprise,465,358,0.77\\r\\nDL-10854,Harper Finch Legal,Business,457,390,0.85\\r\\nDL-10855,Harper Finch Legal,Growth,440,322,0.73\\r\\nDL-10856,Straton Advisory,Team,259,174,0.67\\r\\nDL-10857,Straton Advisory,Enterprise,228,189,0.83\\r\\nDL-10858,Harper Finch Legal,Growth,462,438,0.95\\r\\nDL-10859,NovaEdge Consulting,Team,17,12,0.71\\r\\nDL-10860,NovaEdge Consulting,Growth,45,39,0.87\\r\\nDL-10861,NovaEdge Consulting,Team,71,52,0.73\\r\\nDL-10862,Straton Advisory,Growth,32,22,0.69\\r\\nDL-10863,Straton Advisory,Team,60,40,0.67\\r\\nDL-10864,Straton Advisory,Team,150,106,0.71\\r\\nDL-10865,Harper Finch Legal,Enterprise,282,233,0.83\\r\\nDL-10866,NovaEdge Consulting,Business,230,170,0.74\\r\\nDL-10867,Harper Finch Legal,Team,240,152,0.63\\r\\nDL-10868,LegalWorks LLP,Team,198,126,0.64\\r\\nDL-10869,LegalWorks LLP,Business,276,225,0.82\\r\\nDL-10870,Straton Advisory,Business,442,298,0.67\\r\\nDL-10871,LegalWorks LLP,Business,229,185,0.81\\r\\nDL-10872,NovaEdge Consulting,Team,445,288,0.65\\r\\nDL-10873,Straton Advisory,Growth,23,19,0.83\\r\\nDL-10874,Straton Advisory,Growth,46,33,0.72\\r\\nDL-10875,NovaEdge Consulting,Growth,403,300,0.74\\r\\nDL-10876,Straton Advisory,Team,102,62,0.61\\r\\nDL-10877,Straton Advisory,Enterprise,459,371,0.81\\r\\nDL-10878,NovaEdge Consulting,Growth,486,428,0.88\\r\\nDL-10879,Fairbrooke Digital,Growth,399,311,0.78\\r\\nDL-10880,Harper Finch Legal,Team,105,86,0.82\\r\\nDL-10881,Harper Finch Legal,Business,97,63,0.65\\r\\nDL-10882,LegalWorks LLP,Team,279,230,0.82\\r\\nDL-10883,Fairbrooke Digital,Growth,10,8,0.8\\r\\nDL-10884,LegalWorks LLP,Business,98,81,0.83\\r\\nDL-10885,Fairbrooke Digital,Enterprise,151,116,0.77\\r\\nDL-10886,LegalWorks LLP,Team,58,41,0.71\\r\\nDL-10887,NovaEdge Consulting,Enterprise,376,360,0.96\\r\\nDL-10888,Straton Advisory,Business,136,111,0.82\\r\\nDL-10889,NovaEdge Consulting,Team,92,59,0.64\\r\\nDL-10890,Harper Finch Legal,Business,10,6,0.6\\r\\nDL-10891,Harper Finch Legal,Growth,109,78,0.72\\r\\nDL-10892,NovaEdge Consulting,Business,231,173,0.75\\r\\nDL-10893,Straton Advisory,Growth,473,409,0.86\\r\\nDL-10894,Fairbrooke Digital,Team,246,198,0.8\\r\\nDL-10895,Harper Finch Legal,Business,304,253,0.83\\r\\nDL-10896,Straton Advisory,Growth,328,249,0.76\\r\\nDL-10897,Straton Advisory,Enterprise,199,174,0.87\\r\\nDL-10898,NovaEdge Consulting,Enterprise,277,218,0.79\\r\\nDL-10899,NovaEdge Consulting,Enterprise,482,469,0.97\\r\\nDL-10900,LegalWorks LLP,Team,186,134,0.72\\r\\nDL-10901,Fairbrooke Digital,Team,421,355,0.84\\r\\nDL-10902,Harper Finch Legal,Business,386,299,0.77\\r\\nDL-10903,Harper Finch Legal,Team,300,200,0.67\\r\\nDL-10904,Straton Advisory,Growth,467,355,0.76\\r\\nDL-10905,NovaEdge Consulting,Business,131,88,0.67\\r\\nDL-10906,Fairbrooke Digital,Business,112,82,0.73\\r\\nDL-10907,Straton Advisory,Growth,244,205,0.84\\r\\nDL-10908,NovaEdge Consulting,Enterprise,150,145,0.97\\r\\nDL-10909,Straton Advisory,Growth,123,100,0.81\\r\\nDL-10910,NovaEdge Consulting,Growth,135,99,0.73\\r\\nDL-10911,NovaEdge Consulting,Growth,180,148,0.82\\r\\nDL-10912,LegalWorks LLP,Growth,46,41,0.89\\r\\nDL-10913,LegalWorks LLP,Business,124,94,0.76\\r\\nDL-10914,Straton Advisory,Growth,152,122,0.8\\r\\nDL-10915,Straton Advisory,Business,272,220,0.81\\r\\nDL-10916,Harper Finch Legal,Enterprise,471,355,0.75\\r\\nDL-10917,Fairbrooke Digital,Growth,79,65,0.82\\r\\nDL-10918,LegalWorks LLP,Team,418,345,0.83\\r\\nDL-10919,Fairbrooke Digital,Growth,269,224,0.83\\r\\nDL-10920,NovaEdge Consulting,Growth,321,278,0.87\\r\\nDL-10921,Fairbrooke Digital,Team,61,51,0.84\\r\\nDL-10922,NovaEdge Consulting,Team,308,238,0.77\\r\\nDL-10923,Straton Advisory,Enterprise,145,108,0.74\\r\\nDL-10924,Straton Advisory,Enterprise,337,283,0.84\\r\\nDL-10925,Fairbrooke Digital,Team,458,351,0.77\\r\\nDL-10926,NovaEdge Consulting,Growth,385,299,0.78\\r\\nDL-10927,Fairbrooke Digital,Enterprise,422,380,0.9\\r\\nDL-10928,NovaEdge Consulting,Enterprise,383,301,0.79\\r\\nDL-10929,LegalWorks LLP,Business,36,32,0.89\\r\\nDL-10930,NovaEdge Consulting,Growth,442,411,0.93\\r\\nDL-10931,Harper Finch Legal,Growth,367,269,0.73\\r\\nDL-10932,Fairbrooke Digital,Team,63,42,0.67\\r\\nDL-10933,Fairbrooke Digital,Growth,95,79,0.83\\r\\nDL-10934,Harper Finch Legal,Team,424,256,0.6\\r\\nDL-10935,LegalWorks LLP,Enterprise,303,257,0.85\\r\\nDL-10936,Harper Finch Legal,Team,140,99,0.71\\r\\nDL-10937,Fairbrooke Digital,Business,135,94,0.7\\r\\nDL-10938,LegalWorks LLP,Enterprise,338,284,0.84\\r\\nDL-10939,NovaEdge Consulting,Business,118,87,0.74\\r\\nDL-10940,LegalWorks LLP,Enterprise,414,378,0.91\\r\\nDL-10941,Straton Advisory,Team,367,233,0.63\\r\\nDL-10942,LegalWorks LLP,Enterprise,101,83,0.82\\r\\nDL-10943,LegalWorks LLP,Enterprise,49,44,0.9\\r\\nDL-10944,LegalWorks LLP,Growth,245,198,0.81\\r\\nDL-10945,Fairbrooke Digital,Enterprise,436,354,0.81\\r\\nDL-10946,LegalWorks LLP,Business,336,277,0.82\\r\\nDL-10947,Fairbrooke Digital,Team,94,57,0.61\\r\\nDL-10948,Harper Finch Legal,Growth,150,115,0.77\\r\\nDL-10949,Straton Advisory,Team,130,78,0.6\\r\\nDL-10950,Straton Advisory,Enterprise,447,419,0.94\\r\\nDL-10951,LegalWorks LLP,Team,355,299,0.84\\r\\nDL-10952,Harper Finch Legal,Growth,105,98,0.93\\r\\nDL-10953,Straton Advisory,Business,432,302,0.7\\r\\nDL-10954,LegalWorks LLP,Growth,243,208,0.86\\r\\nDL-10955,Fairbrooke Digital,Enterprise,425,397,0.93\\r\\nDL-10956,Fairbrooke Digital,Team,131,98,0.75\\r\\nDL-10957,NovaEdge Consulting,Enterprise,461,348,0.75\\r\\nDL-10958,LegalWorks LLP,Team,171,118,0.69\\r\\nDL-10959,Harper Finch Legal,Enterprise,357,307,0.86\\r\\nDL-10960,LegalWorks LLP,Growth,413,383,0.93\\r\\nDL-10961,LegalWorks LLP,Growth,296,256,0.86\\r\\nDL-10962,LegalWorks LLP,Enterprise,419,391,0.93\\r\\nDL-10963,LegalWorks LLP,Enterprise,73,65,0.89\\r\\nDL-10964,NovaEdge Consulting,Growth,401,288,0.72\\r\\nDL-10965,NovaEdge Consulting,Business,95,62,0.65\\r\\nDL-10966,Straton Advisory,Enterprise,388,349,0.9\\r\\nDL-10967,LegalWorks LLP,Growth,465,348,0.75\\r\\nDL-10968,LegalWorks LLP,Enterprise,434,392,0.9\\r\\nDL-10969,Fairbrooke Digital,Enterprise,138,131,0.95\\r\\nDL-10970,Straton Advisory,Business,481,427,0.89\\r\\nDL-10971,LegalWorks LLP,Team,238,174,0.73\\r\\nDL-10972,LegalWorks LLP,Growth,85,79,0.93\\r\\nDL-10973,Harper Finch Legal,Enterprise,463,356,0.77\\r\\nDL-10974,Straton Advisory,Business,207,167,0.81\\r\\nDL-10975,NovaEdge Consulting,Growth,241,173,0.72\\r\\nDL-10976,Straton Advisory,Business,309,259,0.84\\r\\nDL-10977,NovaEdge Consulting,Growth,429,395,0.92\\r\\nDL-10978,Fairbrooke Digital,Growth,6,5,0.83\\r\\nDL-10979,Harper Finch Legal,Team,51,38,0.75\\r\\nDL-10980,LegalWorks LLP,Growth,44,41,0.93\\r\\nDL-10981,Fairbrooke Digital,Enterprise,107,91,0.85\\r\\nDL-10982,Harper Finch Legal,Business,338,242,0.72\\r\\nDL-10983,NovaEdge Consulting,Team,56,44,0.79\\r\\nDL-10984,Straton Advisory,Business,388,276,0.71\\r\\nDL-10985,Fairbrooke Digital,Growth,190,155,0.82\\r\\nDL-10986,LegalWorks LLP,Team,379,300,0.79\\r\\nDL-10987,Straton Advisory,Team,286,198,0.69\\r\\nDL-10988,Harper Finch Legal,Business,109,76,0.7\\r\\nDL-10989,NovaEdge Consulting,Business,200,142,0.71\\r\\nDL-10990,LegalWorks LLP,Team,81,56,0.69\\r\\nDL-10991,NovaEdge Consulting,Growth,340,238,0.7\\r\\nDL-10992,LegalWorks LLP,Growth,87,80,0.92\\r\\nDL-10993,NovaEdge Consulting,Growth,46,38,0.83\\r\\nDL-10994,Harper Finch Legal,Business,475,336,0.71\\r\\nDL-10995,LegalWorks LLP,Business,338,303,0.9\\r\\nDL-10996,Fairbrooke Digital,Enterprise,190,151,0.79\\r\\nDL-10997,Straton Advisory,Business,337,290,0.86\\r\\nDL-10998,NovaEdge Consulting,Enterprise,238,195,0.82\"},\"read_csv\":null,\"create\":null,\"delete\":null,\"list_tabs\":null,\"add_tab\":null,\"delete_tab\":null,\"edit\":null,\"add_content\":null,\"delete_content\":null,\"create_chart\":null,\"filter_tab\":null}"
+        }
+      ],
+      "tool_call_id": "call-703d8034-43b0-48e5-8243-67392196936a-22"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"path\":\"/5. Client Data Room/09 Optional datasets\"}",
+            "name": "filesystem_server_list_files"
+          },
+          "id": "call-a20c056e-f396-4c1c-82bd-8b9a52bc61d8-23",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "The output is truncated again at the end, it gave about 1000 rows? The raw_output has many lines, but in the function response it's cut off in this simulation, but assume in real it would give the tex...",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "The output is truncated again at the end, it gave about 1000 rows? The raw_output has many lines, but in the function response it's cut off in this simulation, but assume in real it would give the tex..."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "'Brightpath_Revenue_by_Segment.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 38192 bytes\n'Brightpath_Product_Roadmap.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 9775 bytes\n'Brightpath_Revenue_Expansion_Upsell.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 46902 bytes\n'Brightpath_Seat_Utilization.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 201158 bytes\n'Brightpath_Historical_Pricing_Versions_ChangeLog.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 10720 bytes\n'Brightpath_Customer_Firmographic_Profiles.xlsx' (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet file) 21591 bytes\n"
+        }
+      ],
+      "tool_call_id": "call-a20c056e-f396-4c1c-82bd-8b9a52bc61d8-23"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"apt list --installed 2>/dev/null | grep -E 'libre|ssconvert|gnumeric' || echo 'no'; which ssconvert; ls /usr/bin/*csv* /usr/bin/*xlsx* 2>/dev/null || echo 'no converters'\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-7a6e82ac-29bd-4013-b945-1c8a8947cc52-24",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Only that.\n\nPerhaps the \"baseline seat utilization data\" is this xlsx, and the targets are in the PDF, and to answer the questions, we need to compute actual shares from data, and use target from char...The user query is: Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Only that.\n\nPerhaps the \"baseline seat utilization data\" is this xlsx, and the targets are in the PDF, and to answer the questions, we need to compute actual shares from data, and use target from char...The user query is: Use the baseline seat utilization data against the attached 2025 strategic targets for the following two metrics."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"libreadline8t64/stable,now 8.2-6 arm64 [installed,automatic]\\nlibreoffice-base-core/stable,stable-security,now 4:25.2.3-2+deb13u4 arm64 [installed,automatic]\\nlibreoffice-calc/stable,stable-security,now 4:25.2.3-2+deb13u4 arm64 [installed]\\nlibreoffice-common/stable,stable-security,now 4:25.2.3-2+deb13u4 all [installed,automatic]\\nlibreoffice-core/stable,stable-security,now 4:25.2.3-2+deb13u4 arm64 [installed]\\nlibreoffice-style-colibre/stable,stable-security,now 4:25.2.3-2+deb13u4 all [installed,automatic]\\nlibreoffice-uiconfig-calc/stable,stable-security,now 4:25.2.3-2+deb13u4 all [installed,automatic]\\nlibreoffice-uiconfig-common/stable,stable-security,now 4:25.2.3-2+deb13u4 all [installed,automatic]\\nlibrevenge-0.0-0/stable,now 0.0.5-3+b2 arm64 [installed,automatic]\\nno converters\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-7a6e82ac-29bd-4013-b945-1c8a8947cc52-24"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"import subprocess; subprocess.run(['libreoffice', '--headless', '--convert-to', 'csv:Text:44,34,UTF8', '--outdir', '/tmp', '/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx'], check=True); print('converted')\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-6706c28a-4059-4039-9fe8-acb31c0c6537-25",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "LibreOffice is installed! Great, I can use libreoffice to convert xlsx to csv.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "LibreOffice is installed! Great, I can use libreoffice to convert xlsx to csv.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"converted\\n\\nStderr output:\\nWarning: failed to launch javaldx - java may not function correctly\\nError: source file could not be loaded\"}"
+        }
+      ],
+      "tool_call_id": "call-6706c28a-4059-4039-9fe8-acb31c0c6537-25"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"ls -l '/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx'\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-b5d26546-a3ef-4082-afda-6a426918e15a-26",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Error: source file could not be loaded. Perhaps path issue or permission.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Error: source file could not be loaded. Perhaps path issue or permission.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"\\nError output:\\nls: cannot access '/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx': No such file or directory\\n\\n\\nCommand failed with exit code 2\"}"
+        }
+      ],
+      "tool_call_id": "call-b5d26546-a3ef-4082-afda-6a426918e15a-26"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"find / -name 'Brightpath_Seat_Utilization.xlsx' 2>/dev/null | head -5\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-550537f5-c94d-4924-85f7-cd892edb4361-27",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "No such file? But earlier filesystem listed it.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "No such file? But earlier filesystem listed it.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"/filesystem/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-550537f5-c94d-4924-85f7-cd892edb4361-27"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"import subprocess, os; src='/filesystem/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx'; outdir='/tmp'; os.makedirs(outdir, exist_ok=True); result = subprocess.run(['libreoffice', '--headless', '--convert-to', 'csv', '--outdir', outdir, src], capture_output=True, text=True); print(result.returncode); print(result.stdout); print(result.stderr)\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-5b4f297f-5937-44be-b2ff-44753fffd87c-28",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Yes! The path is /filesystem/5. Client Data Room/... \n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Yes! The path is /filesystem/5. Client Data Room/... \n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"0\\nconvert /filesystem/5. Client Data Room/09 Optional datasets/Brightpath_Seat_Utilization.xlsx as a Calc document -> /tmp/Brightpath_Seat_Utilization.csv using filter : Text - txt - csv (StarCalc)\\n\\nWarning: failed to launch javaldx - java may not function correctly\\n\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-5b4f297f-5937-44be-b2ff-44753fffd87c-28"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"import csv; from collections import defaultdict; totals = defaultdict(lambda: {'total':0, 'low':0, 'med':0, 'high':0}); with open('/tmp/Brightpath_Seat_Utilization.csv', 'r', encoding='utf-8') as f: reader = csv.DictReader(f); count=0; for row in reader: tier = row['Pricing_Tier']; seats = int(row['Seats_Purchased']); util = float(row['Utilization_Percentage']); totals[tier]['total'] += seats; if util < 0.5: totals[tier]['low'] += seats; elif util <= 0.8: totals[tier]['med'] += seats; else: totals[tier]['high'] += seats; count +=1; print(count); print(dict(totals))\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-849a34e6-e899-4e01-a2a0-a18459ff6d85-29",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Great, converted to /tmp/Brightpath_Seat_Utilization.csv\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Great, converted to /tmp/Brightpath_Seat_Utilization.csv\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":false,\"output\":\"\\nError output:\\n  File \\\"<string>\\\", line 1\\n    import csv; from collections import defaultdict; totals = defaultdict(lambda: {'total':0, 'low':0, 'med':0, 'high':0}); with open('/tmp/Brightpath_Seat_Utilization.csv', 'r', encoding='utf-8') as f: reader = csv.DictReader(f); count=0; for row in reader: tier = row['Pricing_Tier']; seats = int(row['Seats_Purchased']); util = float(row['Utilization_Percentage']); totals[tier]['total'] += seats; if util < 0.5: totals[tier]['low'] += seats; elif util <= 0.8: totals[tier]['med'] += seats; else: totals[tier]['high'] += seats; count +=1; print(count); print(dict(totals))\\n                                                                                                                            ^^^^\\nSyntaxError: invalid syntax\\n\\n\\nCommand failed with exit code 1\"}"
+        }
+      ],
+      "tool_call_id": "call-849a34e6-e899-4e01-a2a0-a18459ff6d85-29"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"cat > /tmp/agg.py << 'EOF'\\nimport csv\\nfrom collections import defaultdict\\ntotals = defaultdict(lambda: {'total':0, 'low':0, 'med':0, 'high':0})\\nwith open('/tmp/Brightpath_Seat_Utilization.csv', 'r', encoding='utf-8') as f:\\n    reader = csv.DictReader(f)\\n    count=0\\n    for row in reader:\\n        tier = row['Pricing_Tier']\\n        seats = int(row['Seats_Purchased'])\\n        util = float(row['Utilization_Percentage'])\\n        totals[tier]['total'] += seats\\n        if util < 0.5:\\n            totals[tier]['low'] += seats\\n        elif util <= 0.8:\\n            totals[tier]['med'] += seats\\n        else:\\n            totals[tier]['high'] += seats\\n        count +=1\\nprint('Total rows:', count)\\nfor tier, data in sorted(totals.items()):\\n    print(tier, data)\\n    print('  Low %:', round(data['low']/data['total']*100, 2) if data['total']>0 else 0)\\n    print('  Med %:', round(data['med']/data['total']*100, 2) if data['total']>0 else 0)\\n    print('  High %:', round(data['high']/data['total']*100, 2) if data['total']>0 else 0)\\nEOF\\npython3 /tmp/agg.py\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-e917c393-0f4e-4e6f-92d9-b4bbe5e08b3c-30",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Syntax error because the one-liner has issues with quotes and complex code. Need to use cat > script.py then run. As per tool desc.",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Syntax error because the one-liner has issues with quotes and complex code. Need to use cat > script.py then run. As per tool desc."
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"Total rows: 5000\\nBusiness {'total': 329683, 'low': 0, 'med': 206913, 'high': 122770}\\n  Low %: 0.0\\n  Med %: 62.76\\n  High %: 37.24\\nEnterprise {'total': 317868, 'low': 0, 'med': 79274, 'high': 238594}\\n  Low %: 0.0\\n  Med %: 24.94\\n  High %: 75.06\\nGrowth {'total': 299156, 'low': 0, 'med': 127778, 'high': 171378}\\n  Low %: 0.0\\n  Med %: 42.71\\n  High %: 57.29\\nTeam {'total': 313025, 'low': 0, 'med': 266160, 'high': 46865}\\n  Low %: 0.0\\n  Med %: 85.03\\n  High %: 14.97\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-e917c393-0f4e-4e6f-92d9-b4bbe5e08b3c-30"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"todos\":[{\"id\":\"1\",\"status\":\"completed\",\"content\":\"Discover and load seat utilization data and targets\"},{\"id\":\"2\",\"status\":\"completed\",\"content\":\"Extract baseline actual seats and shares\"},{\"id\":\"3\",\"status\":\"completed\",\"content\":\"Extract 2025 target seats and shares\"},{\"id\":\"4\",\"status\":\"completed\",\"content\":\"Compute surplus for Medium in Enterprise and percentage point difference for Business High\"}],\"merge\":true}",
+            "name": "todo_write"
+          },
+          "id": "call-b4719c39-03f7-44ee-816f-48544f0db4e8-31",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Awesome! 5000 rows (probably header +5000? but 5000 data rows? anyway).\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Awesome! 5000 rows (probably header +5000? but 5000 data rows? anyway).\n"
+      }
+    },
+    {
+      "content": "{\"success\": true, \"created\": [], \"updated\": [\"1\", \"2\", \"3\", \"4\"], \"todos\": [{\"id\": \"1\", \"content\": \"Discover and load seat utilization data and targets\", \"status\": \"completed\"}, {\"id\": \"2\", \"content\": \"Extract baseline actual seats and shares\", \"status\": \"completed\"}, {\"id\": \"3\", \"content\": \"Extract 2025 target seats and shares\", \"status\": \"completed\"}, {\"id\": \"4\", \"content\": \"Compute surplus for Medium in Enterprise and percentage point difference for Business High\", \"status\": \"completed\"}], \"summary\": {\"total\": 4, \"pending\": 0, \"in_progress\": 0, \"completed\": 4, \"cancelled\": 0}}",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-b4719c39-03f7-44ee-816f-48544f0db4e8-31",
+      "name": "todo_write"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"request\":{\"code\":\"python3 -c \\\"print(122770 / 329683 * 100); print(79274 / 317868 * 100); print(0.1 * 317868); print(79274 - round(0.1 * 317868))\\\"\"}}",
+            "name": "code_execution_server_code_exec"
+          },
+          "id": "call-b7553d13-1602-4f65-b37b-5683ac7a0886-32",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "All done. Now, the answers: for 1) 47487, for 2) 23? But wait, difference 60-37=23 approx.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "All done. Now, the answers: for 1) 47487, for 2) 23? But wait, difference 60-37=23 approx.\n"
+      }
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"success\":true,\"output\":\"37.23880212203844\\n24.939282972806325\\n31786.800000000003\\n47487\\n\"}"
+        }
+      ],
+      "tool_call_id": "call-b7553d13-1602-4f65-b37b-5683ac7a0886-32"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"answer\":\"47487 23\",\"status\":\"completed\"}",
+            "name": "final_answer"
+          },
+          "id": "call-009837d4-fb92-4a4e-a56b-1fab31bd1dd2-33",
+          "type": "function"
+        }
+      ],
+      "function_call": null,
+      "reasoning_content": "Yes, 37.24%, target 60, diff 22.76 pp, rounded to nearest whole is 23.\n",
+      "provider_specific_fields": {
+        "refusal": null,
+        "reasoning_content": "Yes, 37.24%, target 60, diff 22.76 pp, rounded to nearest whole is 23.\n"
+      }
+    },
+    {
+      "content": "47487 23",
+      "role": "tool",
+      "tool_calls": null,
+      "function_call": null,
+      "provider_specific_fields": null,
+      "tool_call_id": "call-009837d4-fb92-4a4e-a56b-1fab31bd1dd2-33",
+      "name": "final_answer"
+    }
+  ],
+  "output": null,
+  "status": "completed",
+  "time_elapsed": 1075.4991958141327,
+  "usage": {
+    "prompt_tokens": 745973,
+    "completion_tokens": 1883,
+    "total_tokens": 747856,
+    "final_answer_tokens": 20
+  }
+}

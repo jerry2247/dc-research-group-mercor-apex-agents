@@ -1,0 +1,220 @@
+## Reusable Code and Tool-Call Snippets
+<memory_item>
+<description>
+When using the code_execution_server_code_exec tool to run Python, always invoke as python3 -c followed by the code in double quotes. Use semicolons for simple statements on one line; for multi-line code with indentation, embed newlines as \n within the string. Bare code or python (without 3) causes shell interpretation or command-not-found errors.
+</description>
+<example>
+python3 -c "r = 0.0985; fcfs = [149.1387682, 144.3343349, 150.5161488, 157.7324231, 165.1306757, 172.7043214]; tv = 2596.867898; cash = 182.947; debt = 0; shares = 50.574641; discounted = 0.0;\nfor n in range(1,7):\n    df = 1 / (1 + r) ** (n - 0.5)\n    cf = fcfs[n-1] if n < 6 else fcfs[n-1] + tv\n    discounted += cf * df\nprint('New EV:', discounted)"
+</example>
+</memory_item>
+
+## Solution Strategies for Recurring Task Shapes
+<memory_item>
+<description>
+When an existing DCF model must be updated to midyear convention while preserving all other inputs and assumptions, modify only the timing exponents used in the present-value calculations; do not alter revenues, margins, growth rates, capex, working capital, tax rates, or terminal-value parameters.
+</description>
+<example>
+Locate the discounting formulas; replace each year-n end-of-year exponent with (n - 0.5); recompute the PV of each cash-flow line and the total enterprise value; divide by shares outstanding to obtain per-share value.
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a financial model task requires finding the value of an input parameter that produces a target output metric (such as a specific IRR or yield), implement a Python replica of the model's key calculations and use a numerical search method such as bisection to solve for the parameter.
+</description>
+<example>
+def solve_for_param(target_metric, low=0.0, high=0.2, tol=1e-6):
+    for _ in range(50):
+        mid = (low + high) / 2
+        metric = compute_model_metric(mid)
+        if metric < target_metric:
+            low = mid
+        else:
+            high = mid
+        if abs(metric - target_metric) < tol: break
+    return round(mid, precision)
+</example>
+</memory_item>
+<memory_item>
+<description>
+When an LBO model task requires revising the offer premium to CNS holders or the maximum Term Loan B leverage, update only the affected entry valuation (new share price = current * (1 + premium)) and debt amount (TLB drawn = new max); preserve all operating forecasts, margins, working capital, capex, tax, exit multiple, and debt terms; then recalculate entry equity value, sponsor equity, debt repayment schedule, and exit equity to obtain the revised IRR and MoM.
+</description>
+<example>
+premium = task_premium; max_tlb = task_max_tlb; entry_price = current_price * (1 + premium); tlb = max_tlb; recompute_sources_uses(); run_debt_schedule(); compute_exit_equity(); irr = ...; mom = ...
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a valuation task requires implied equity values from Comparables, Precedents, DCF, and LBO methods, compute each separately using the task-specified inputs (2025E EBITDA for comps and precedents; base DCF model and assumed offer price for DCF and LBO), then calculate the arithmetic mean of the four, round to one decimal place, and deliver all five numbers (four methods + mean) in $ million.
+</description>
+<example>
+implied_comps = ...; implied_precedents = ...; implied_dcf = ...; implied_lbo = ...; mean = round((implied_comps + implied_precedents + implied_dcf + implied_lbo)/4, 1); submit "x.x y.y z.z w.w mean m.m"
+</example>
+</memory_item>
+<memory_item>
+<description>
+When an LBO task requires building sensitivity tables for Sponsor IRR under different offer premiums and exit multiples while respecting a TLB cap, vary the premium (to recompute entry price, equity value, and sponsor equity after enforcing the TLB maximum and balancing sources/uses at constant entry EV) and exit multiple (to recompute exit EV and equity); for each combination run the debt schedule and derive IRR; present results in a 2x2 table (rows = premiums, columns = exit multiples) rounded to one decimal place.
+</description>
+<example>
+For premiums 15.0%, 25.0% and exit multiples 17.5x, 18.5x: compute the four IRR values from the capped-TLB structure and format as table.
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires revising an operating expense assumption such as employee compensation expense, extract the base compensation values from the model, apply the specified reduction (e.g., 50% of a referenced stock-based compensation value), update the NOPAT and Unlevered FCF calculations for the affected years, then recompute the enterprise value and per-share value using the standard DCF discounting and terminal value methods while preserving all other inputs including WACC, terminal growth, and shares.
+</description>
+<example>
+compensation_reduction = 0.5 * stock_based_comp_value; updated_comp = base_comp - compensation_reduction; updated_nopat = base_nopat - (compensation_reduction * (1 - tax_rate)); updated_fcf = ...; then run standard DCF code with updated_fcf
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a valuation task requires an implied share price from filtered precedents (AUM >= $90B) combined with adjusted DCF, filter the precedents table to retain only transactions meeting the AUM threshold, extract the mean or median EV/EBITDA multiple, adjust the DCF forward (2025E) total expenses upward by 10% and D&A by 5% to obtain the adjusted EBITDA, compute Implied EV = multiple * adjusted_EBITDA, Implied Market Cap = Implied EV - Net Debt, and share price = Implied Market Cap / FDSO; round all values to 2 decimal places and edit the 'Precedents' tab to insert the share price build starting with the columns EV/EBITDA, 2025E EBITDA, Implied EV, Net Debt, Implied Market Cap, FDSO, share price.
+</description>
+<example>
+Filter precedents AUM >=90; multiple = mean_or_median; adjusted_ebitda = base_ebitda_with_expense_adj; ev = multiple * adjusted_ebitda; mkt_cap = ev - net_debt; price = round(mkt_cap / fdso, 2); edit 'Precedents' tab with build columns.
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires revising revenue growth rates by business segment while preserving all other inputs, project each revenue segment independently using its specified growth rate to obtain forward revenues, compute total revenue, apply the operating expense and capex percentages of total revenue from the LBO Model-hardcoded tab to derive updated expenses and capex, recalculate NOPAT and unlevered FCF for each year, then recompute enterprise value and implied share price using the standard DCF discounting and terminal value methods (Gordon growth or exit multiple) while preserving WACC, tax rate, shares, and terminal parameters.
+</description>
+<example>
+rev_seg1 = base_seg1 * (1 + g1)**n; rev_seg2 = base_seg2 * (1 + g2)**n; rev_seg3 = base_seg3 * (1 + g3)**n; total_rev = rev_seg1 + rev_seg2 + rev_seg3; opex = total_rev * pct_opex_from_lbo; capex = total_rev * pct_capex_from_lbo; ...; then run standard DCF with updated FCFs for both terminal methods.
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires the terminal value based on an EV/AUM multiple drawn from a peer set (with specified peers excluded), extract the relevant EV/AUM multiples from the peer data, compute the mean or median multiple, project forward AUM using the task-specified growth relation (such as linear with management fees), compute TV = multiple * projected_AUM, then integrate into the standard DCF discounting of FCFs plus TV to obtain enterprise value, equity value, and per-share value while preserving all other model inputs and rounding to the required precision.
+</description>
+<example>
+multiple = mean_or_median(ev_aum_from_peers_excluding_specified); projected_aum = ...; tv = multiple * projected_aum; then discount FCFs + TV with standard WACC to get EV and per-share value.
+</example>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires simultaneously lowering all revenue growth rates by a fixed number of percentage points and raising employee compensation as a percentage of revenue by a fixed number of percentage points while also applying midyear convention, implement the combined adjustments in a Python replica of the model: subtract the pp shift from each original growth rate to project revenues, add the pp shift to the compensation pct to derive updated opex and NOPAT, compute the resulting FCF series, discount using (n-0.5) exponents, and obtain per-share values separately for Gordon growth and exit-multiple terminal methods while preserving WACC, tax rate, shares, and other inputs.
+</description>
+<example>
+adjusted_g = base_g - delta_pp; adjusted_comp_pct = base_comp_pct + delta_pp; ... project revs and fcf with adjusted_g and adjusted_comp_pct; then discount with midyear df for both terminal methods to obtain the two share prices.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires calculating the implied terminal growth rate consistent with a terminal value based on an EV / mgmt fees (or AUM) multiple from a peer set (with specified peers excluded), extract the EV / mgmt fees multiples from the peer data, compute the mean or median multiple, project the terminal mgmt fees using the task-specified growth relation (such as linear with management fees or revenue), compute the target TV = multiple * projected_mgmt_fees, then back out the implied g = WACC - FCF_{n+1} / TV and round the percentage to two decimal places while preserving all other model inputs and assumptions.
+</description>
+<example>
+multiple = mean_or_median(ev_mgmt_fees_from_peers_excluding_specified); projected_mgmt_fees = ...; tv = multiple * projected_mgmt_fees; implied_g = wacc - fcf_next / tv; round(implied_g * 100, 2)
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When a DCF task requires adjusting one or more revenue growth rates (including to achieve a target multi-year CAGR by solving for a specific intermediate year) while extending the projection horizon and preserving other assumptions, implement the changes in a Python replica: solve for the required growth rate(s) using the CAGR formula rearranged for the target year, extend the forecast to the new horizon by copying the final year's assumptions forward, adjust terminal growth if specified, recompute FCF series, discount, and obtain per-share values for Gordon growth and exit-multiple terminal methods while preserving WACC, tax rate, shares, and other inputs; round results to two decimal places.
+</description>
+<example>
+target_cagr = (end_rev / start_rev) ** (1 / n) - 1; solve for g_specific such that the compound growth over the window equals target_cagr; extend projections by repeating year-n assumptions for year n+1; terminal_g_new = terminal_g + 0.0025; project FCFs; discount and compute share prices for both terminal methods.
+</sample>
+</memory_item>
+
+## Formulas, Definitions, and Conventions
+<memory_item>
+<description>
+Midyear convention treats each period's free cash flow as occurring at the midpoint of the year. For annual periods the discount factor for year n therefore uses the fractional exponent (n - 0.5).
+</description>
+<example>
+DF_n = 1 / (1 + r) ** (n - 0.5)
+</sample>
+</memory_item>
+
+<memory_item>
+<description>
+The final per-share DCF value is the enterprise value (sum of discounted FCFs plus discounted terminal value) minus net debt, divided by the number of shares, then rounded to the nearest cent.
+</description>
+<example>
+Value_per_share = round( (EV - Net_Debt) / Shares , 2 )
+</sample>
+</memory_item>
+<memory_item>
+<description>
+In LBO models, MoM (Multiple of Money) is exit equity value divided by sponsor equity invested. IRR is the compound annual return solving for the rate that equates sponsor cash flows, often approximated from MoM as (MoM ** (1 / holding_years)) - 1.
+</description>
+<example>
+MoM = exit_equity / sponsor_equity
+IRR_approx = MoM ** (1 / n_years) - 1
+</sample>
+</memory_item>
+<memory_item>
+<description>
+Implied Adj. EBITDA Entry Multiple (2024A) is entry enterprise value divided by 2024A Adj. EBITDA.
+</description>
+<example>
+Implied Entry Multiple = Entry_EV / 2024A_Adj_EBITDA
+</sample>
+</memory_item>
+<memory_item>
+<description>
+Implied terminal growth rate g consistent with a target TV is given by g = WACC - FCF_{n+1} / TV.
+</description>
+<example>
+g = r - FCF_{n+1} / TV
+</sample>
+</memory_item>
+
+## Environment and Sandbox Facts
+<memory_item>
+<description>
+The code execution environment has Python 3 available and requires the explicit python3 command; the plain python command is not available or leads to shell interpretation.
+</description>
+<example>
+Invoke as python3 -c "code"; confirm with which python3 if needed.
+</sample>
+</memory_item>
+
+## Pitfalls, Edge Cases, and Verification Checks
+<memory_item>
+<description>
+After applying midyear convention, confirm that only the discount exponents were changed and that the delivered numeric answer matches the required rounding and delivery format (nearest cent, no extra text).
+</description>
+<example>
+Verify rounding: final numeric result rounded to exactly two decimal places; confirm no other model inputs were edited.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When the task provides specific assumptions (WACC, terminal growth, exit multiple) that differ from the model's built-in values, override with the task-specified values for the calculation; do not use the spreadsheet's embedded rates.
+</description>
+<example>
+Confirm WACC = task_WACC, g = task_g, multiple = task_multiple before computing terminal values or yields.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When the task specifies the precision for the answer (e.g., to one decimal place), round the final numeric results accordingly and deliver only the numbers in the requested format without extra text.
+</description>
+<example>
+final_value = round(computed, 1); submit exactly as "x.x y.y" or per the required channel and format.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When filtering precedents for AUM threshold and applying specified expense adjustments before computing implied share price, confirm only transactions with AUM >= $90B are retained, only total expenses (+10%) and D&A (+5%) are increased on the DCF forward figures, the share price build is placed starting in the 'Precedents' tab, and all values are rounded to exactly two decimal places.
+</description>
+<example>
+Verify AUM filter excludes <$90B; confirm expense and D&A adjustments only; check build columns in 'Precedents' tab; round all to 2 decimals.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When applying simultaneous revenue-growth and compensation-pct shifts plus midyear discounting, confirm that only the specified growth rates were reduced, only the compensation percentage was increased, the discount exponents use (n-0.5), and each terminal method's per-share result is reported separately to two decimal places in the requested message format.
+</description>
+<example>
+Verify growth rates reduced by exactly the stated pp, compensation pct increased by exactly the stated pp, midyear exponents used, and output format is two separate USD values rounded to two decimals.
+</sample>
+</memory_item>
+<memory_item>
+<description>
+When computing an implied terminal growth rate from a peer-based TV, confirm that only the specified peers were excluded when calculating the mean or median multiple, the mgmt fees (or AUM) projection used the linear relation from the base year, the solved g is reported to exactly two decimal places as a percentage, and no other model inputs or assumptions were altered.
+</description>
+<example>
+Verify peers excluded match the task list; confirm mgmt fees projection method; check g rounded to two decimals with % sign or per required format.
+</sample>
+</memory_item>

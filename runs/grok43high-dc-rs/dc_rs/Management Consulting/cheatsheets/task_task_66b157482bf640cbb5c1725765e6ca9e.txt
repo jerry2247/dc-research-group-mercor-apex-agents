@@ -1,0 +1,153 @@
+## Reusable Code and Tool-Call Snippets
+<memory_item>
+<description>
+To explore and load data from .xlsx files, first use sheets_server_sheets with action "list_tabs" on the file_path to identify worksheets and their indices, then use action "read_tab" with tab_index, max_rows (e.g., 30-50), and compact=true to retrieve structured data without full file load.
+</description>
+<example>
+sheets_server_sheets({"request":{"action":"list_tabs","file_path":"<path_to_xlsx>"}})
+sheets_server_sheets({"request":{"action":"read_tab","file_path":"<path_to_xlsx>","tab_index":0,"max_rows":30,"compact":true}})
+</example>
+</memory_item>
+<memory_item>
+<description>
+Use filesystem_server_list_files with recursive path navigation starting from "/" to discover folders and files (e.g., Research, Client Data Room, .xlsx, .docx, .png), then apply filesystem_server_read_image_file for PNG files containing tables or charts.
+</description>
+<example>
+filesystem_server_list_files({"path":"/3. Research/Competitor Pricing and Packaging Research"})
+filesystem_server_read_image_file({"file_path":"<path_to_png>"})
+</example>
+</memory_item>
+<memory_item>
+<description>
+For multi-step analysis, initialize and update progress with todo_write using a list of objects each having id, status ("in_progress", "pending", "completed"), and content; merge=true on updates to track tasks like data loading, parsing, calculation, and verification.
+</description>
+<example>
+todo_write({"todos":[{"id":"1","status":"in_progress","content":"Discover and load data files"},{"id":"2","status":"pending","content":"Parse segment/tier data and apply formulas"}],"merge":false})
+</memory_item>
+<memory_item>
+<description>
+For survey data analysis, load xlsx with pandas, filter by priority criteria (e.g., AI capabilities as top priority), compute mean and standard deviation of efficiency score column for full and filtered datasets.
+</description>
+<example>
+import pandas as pd
+df = pd.read_excel('<path_to_survey_xlsx>')
+mean_all = df['Efficiency_Score'].mean()
+mean_filtered = df[df['Priority'] == 'AI capabilities']['Efficiency_Score'].mean()
+std = df['Efficiency_Score'].std()
+fraction = abs(mean_all - mean_filtered) / std
+</example>
+</memory_item>
+
+## Solution Strategies for Recurring Task Shapes
+<memory_item>
+<description>
+For target-setting or forecasting tasks involving segments/tiers (e.g., Upper Mid-Market, Enterprise) and metrics like revenue share, win rate, or multipliers: (1) locate and read transaction or pricing sheets; (2) filter to "Won" deals only for the named segment/sector; (3) compute aggregates like total realized revenue or average deal size; (4) apply target share/multiplier to derive implied volume or pipeline; (5) round per task rules (whole numbers for counts, nearest dollar for currency) before final delivery as plain text message.
+</description>
+<example>
+Filter Won deals in segment X; total_realized = sum(revenue); implied_deals = (target_share * total_realized) / avg_expansion_deal_size; required_pipeline = target_ARR / win_rate.
+</example>
+</memory_item>
+<memory_item>
+<description>
+For ranking or scoring tasks with multiple criteria (e.g., policy violations, deal types, approval levels): (1) locate the relevant log/data file; (2) aggregate per-entity metrics (counts exceeding thresholds by type); (3) rank and assign scores 1–4 (extreme values get 1 or 4); (4) assign identical scores on ties; (5) apply tiebreaker (e.g., secondary count) if totals match; (6) sum scores, rank entities, and deliver findings as plain-text message after rounding scores to whole numbers.
+</description>
+<example>
+Aggregate per approver: violation_count, negotiation_excess, pilot_excess, cfo_within; rank and score; total = sum(scores); rank by total, tiebreak by cfo_count.
+</memory_item>
+<memory_item>
+<description>
+For survey data tasks involving efficiency scores and priority filters: (1) locate and read the survey xlsx file; (2) compute overall mean and std of efficiency; (3) filter to subset where AI capabilities ranked top priority; (4) compute subset mean; (5) calculate |overall_mean - subset_mean| / std as fraction of std dev; (6) round to 4 decimal places before delivery as plain text.
+</description>
+<example>
+mean_all, std, mean_ai = compute_means_and_std(df); fraction = abs(mean_all - mean_ai) / std; round to 4 decimals.
+</memory_item>
+<memory_item>
+<description>
+For discount analysis tasks on specific tiers from approval logs: (1) locate and read the discount approval logs xlsx; (2) aggregate discount % and policy threshold per named tier (filter rows by tier); (3) compute average discount and average threshold per tier; (4) calculate % variance as (avg_discount - avg_threshold) / avg_threshold; (5) round results to 0.01% and deliver as plain-text message.
+</description>
+<example>
+Per tier: avg_disc = mean(discounts); avg_thresh = mean(thresholds); variance = (avg_disc - avg_thresh) / avg_thresh * 100; round to 0.01%.
+</memory_item>
+
+## Formulas, Definitions, and Conventions
+<memory_item>
+<description>
+Optimal price = minimum_price * (1 + optimal_multiplier) where optimal_multiplier is the decimal form of the percentage points above minimum (e.g., 0.10 for 10%). Annual revenue per tier/segment = optimal_price * volume. Total forecast revenue in $m = sum(annual_revenue) / 1_000_000, rounded to 1 decimal.
+</description>
+<example>
+revenue_m = (min_price * (1 + mult) * volume) / 1000000
+</memory_item>
+<memory_item>
+<description>
+Implied deal volume for expansion target = (target_expansion_share * segment_total_realized_revenue_from_Won_deals) / average_size_of_Upper_Mid-Market_Won_expansion_deal. Required pipeline capacity = target_ARR / Target_Win_Rate where target_ARR equals sum of Won deals in the named sector/segment.
+</description>
+<example>
+implied_volume = (share * total_Won_revenue) / avg_deal_size; pipeline = target_ARR / win_rate
+</memory_item>
+<memory_item>
+<description>
+For multi-criteria ranking/scoring: rank entities by each metric (descending or ascending per rule), assign scores 1–4 with extremes at 1 or 4 and middle ranks 2–3; identical metrics receive identical scores. Tiebreaker on total: use secondary metric (e.g., Director-level count). Round final scores to nearest whole number.
+</description>
+<example>
+rank_by_metric(M); score = 1 for top/bottom, 4 for opposite; total = sum(scores); tiebreak_total by Director_count.
+</memory_item>
+<memory_item>
+<description>
+Fraction of standard deviation = |mean_all - mean_filtered| / std_dev where mean_filtered is mean for users with AI priority as top.
+</description>
+<example>
+fraction = |mean_all - mean_ai| / std
+</memory_item>
+<memory_item>
+<description>
+% variance from policy threshold = ((avg_discount - avg_policy_threshold) / avg_policy_threshold) * 100, rounded to nearest 0.01%. When user count is required, compute midpoint of company size range (e.g., for "50-250M" range use (50 + 250) / 2).
+</description>
+<example>
+variance = ((mean_disc - mean_thresh) / mean_thresh) * 100; midpoint = (low + high) / 2
+</memory_item>
+
+## Environment and Sandbox Facts
+<memory_item>
+<description>
+sheets_server_sheets supports actions "list_tabs" (returns worksheet names and indices) and "read_tab" (returns raw_output as CSV-like text). filesystem_server tools handle directory listing, file metadata, and image reading (base64 PNGs may embed tables). code_execution_server_code_exec executes the "code" value as Python; provide direct statements without shell wrappers.
+</description>
+<example>
+Use list_tabs then read_tab on .xlsx in Client Data Room or Research folders; read_image_file on .png for multipliers or subscriber data.
+</memory_item>
+<memory_item>
+<description>
+For large .xlsx files, read_tab may require multiple calls using cell_range parameter (e.g., "A1:L100", "A101:L200") to retrieve data in batches when row limits apply.
+</description>
+<example>
+sheets_server_sheets({"request":{"action":"read_tab","file_path":"<path>","tab_index":0,"cell_range":"A1:L100","compact":true}})
+</memory_item>
+
+## Pitfalls, Edge Cases, and Verification Checks
+<memory_item>
+<description>
+code_execution_server_code_exec calls fail with shell syntax errors or "python: not found" if the code string uses shell constructs (e.g., python -c, unescaped quotes, or newlines passed to sh). Provide only raw Python code (use ; for multiple statements if needed) and test simple expressions first.
+</description>
+<example>
+Correct: {"request":{"code":"print(720 * 1.1 * 100000 / 1000000)"}} — avoid wrapping in python -c or shell syntax.
+</memory_item>
+<memory_item>
+<description>
+After calculations, verify rounding matches task (nearest whole number for counts/deals, nearest dollar for currency) and that filters are applied only to "Won" deals before aggregating revenue or averages; confirm final output is delivered as plain-text message rather than internal state.
+</description>
+<example>
+confirm value is rounded_to_nearest_whole(deals) and currency_to_nearest_dollar(ARR); deliver as text message.
+</memory_item>
+<memory_item>
+<description>
+For survey data, ensure correct filter on priority column before computing means and std; round final fraction and scores to 4 decimal places.
+</description>
+<example>
+confirm filter matches task priority cue; round(fraction, 4).
+</memory_item>
+<memory_item>
+<description>
+When processing discount logs for tiers, confirm exact tier name matches (e.g., "Business", "Growth") and apply midpoint calculation to company size ranges only when task explicitly requires user count proxy; verify variance uses relative formula before rounding.
+</description>
+<example>
+confirm tier == "Business" or "Growth"; variance = ((avg_disc - avg_thresh) / avg_thresh) * 100; round both to 0.01.
+</memory_item>
