@@ -203,8 +203,10 @@ asserts equality.
 ## A9. Agent profile knobs (no hidden capabilities)
 
 **Claim**: Every active agent profile sets ONLY model-mode knobs plus
-the per-call HTTP timeout in `orchestrator_extra_args`:
-`{reasoning_effort, verbosity, temperature, timeout}`. None of these is set:
+provider endpoint plumbing and the per-call HTTP timeout in
+`orchestrator_extra_args`:
+`{reasoning_effort, verbosity, temperature, api_base, extra_body,
+timeout}`. None of these is set:
 - `tools=` — agent's tool surface comes from the MCP gateway only.
 - `top_p`, `max_tokens`, `max_input_tokens` — provider-side defaults;
   upstream example does not set them either.
@@ -213,12 +215,18 @@ the per-call HTTP timeout in `orchestrator_extra_args`:
 - `web_search`, `code_interpreter`, `image_input` — none of these is a
   knob we surface.
 
+For DeepSeek, `extra_body` is limited to
+`{"thinking": {"type": "enabled", "reasoning_effort": "max"}}` so the
+documented max-effort setting reaches the provider through LiteLLM's
+OpenAI-compatible request body.
+
 **Tests**:
 - `tests/test_fidelity.py::test_no_profile_uses_disallowed_extra_args`
 - `tests/test_fidelity.py::test_no_profile_sets_top_p`
 - `tests/test_fidelity.py::test_no_profile_sets_max_tokens`
 - `tests/test_fidelity.py::test_gpt55_profiles_match_apex_bench_shape`
 - `tests/test_fidelity.py::test_grok43_profiles_match_apex_bench_shape`
+- `tests/test_fidelity.py::test_deepseek_v4_pro_profile_matches_docs_shape`
 
 ---
 
@@ -264,9 +272,10 @@ sister harness; we wait until both repos can enable Claude jointly.
 and `grading/runner/utils/llm.py`) pass the model name string directly
 to `litellm.acompletion(model=<string>)`. There is no allow-list,
 no `MODEL_MAPPINGS` dict, no validate-then-call sequence. This is the
-load-bearing invariant that lets `gpt-5.5` and `grok-4.3` work with
-**zero vendor patches** — they are forwarded to LiteLLM as
-`openai/gpt-5.5` and `xai/grok-4.3` and routed by prefix.
+load-bearing invariant that lets `gpt-5.5`, `grok-4.3`, and
+`deepseek-v4-pro` work with **zero vendor patches** — they are forwarded
+to LiteLLM as `openai/gpt-5.5`, `xai/grok-4.3`, and
+`deepseek/deepseek-v4-pro` and routed by prefix.
 
 **Source of truth**: the two `llm.py` files above. We grep for both
 `"model": model` and `acompletion(**kwargs)` patterns in each file.
@@ -285,9 +294,9 @@ not fidelity bugs; they are scope choices.
 | Aspect | Mercor's example | Ours | Reason |
 |---|---|---|---|
 | Judge model | `gemini/gemini-2.5-flash` (open example); Gemini 2.5 Pro Thinking=On (leaderboard) | `openai/gpt-5.5` (medium-by-default) | Cross-benchmark consistency with apex-bench; see REPRODUCIBILITY.md. |
-| Agent model | `gemini/gemini-3-pro-preview` (open example) | profile-driven (`gpt-5.5-*`, `grok-4.3-*`) | We compare DC variants against a fixed agent surface. |
+| Agent model | `gemini/gemini-3-pro-preview` (open example) | profile-driven (`gpt-5.5-*`, `grok-4.3-*`, `deepseek-v4-pro-max`) | We compare DC variants against a fixed agent surface. |
 | Number of runs per task | 1 | 1 | Same. |
-| Test models | one example task | profile registry (7 profiles), one profile per invocation | Parity with apex-bench. |
+| Test models | one example task | profile registry (8 profiles), one profile per invocation | Parity with apex-bench plus one DeepSeek V4 Pro max-effort profile. |
 | Claude/Bedrock | (would route via direct Anthropic API) | deferred | Joint deferral with apex-bench. |
 | Resume | none | per-CSV `status="completed"` resume | Operational ergonomics; does not change per-task behavior. |
 

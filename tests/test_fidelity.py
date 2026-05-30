@@ -169,6 +169,14 @@ _ALLOWED_EXTRA_ARG_KEYS = frozenset(
         "reasoning_effort",
         "verbosity",
         "temperature",
+        # Provider endpoint plumbing, not a behavioral model knob. We pin the
+        # official DeepSeek OpenAI-compatible base URL instead of relying on a
+        # LiteLLM default alias.
+        "api_base",
+        # Provider endpoint plumbing for native DeepSeek max effort. Pinned
+        # LiteLLM preserves `thinking.reasoning_effort=max` through extra_body;
+        # top-level reasoning_effort is collapsed to plain thinking-enabled.
+        "extra_body",
         # HTTP plumbing, not a model capability. Splatted into
         # litellm.acompletion(timeout=...) by the vendor's generate_response;
         # bounds how long to wait for one LLM response. Required because
@@ -185,7 +193,8 @@ _ALLOWED_EXTRA_ARG_KEYS = frozenset(
 def test_no_profile_uses_disallowed_extra_args() -> None:
     """We only set keys Mercor's published example sets in
     ``orchestrator_config.json`` extra_args (effectively none) plus our
-    per-family knobs (reasoning_effort, verbosity, temperature). Anything
+    per-family knobs (reasoning_effort, verbosity, temperature) and provider
+    plumbing (api_base, extra_body, timeout). Anything
     else implies a hidden capability (tools, system prompt, top_p, ...) and
     fails the audit."""
     for p in all_profiles():
@@ -193,7 +202,7 @@ def test_no_profile_uses_disallowed_extra_args() -> None:
         assert not extras, (
             f"profile {p.name!r} sets disallowed extra_args keys: {extras}. "
             "If this is intentional, update _ALLOWED_EXTRA_ARG_KEYS and confirm "
-            "the published example sets the same key."
+            "the key is provider-documented and does not add hidden tools or data."
         )
 
 
@@ -234,6 +243,27 @@ def test_grok43_profiles_match_apex_bench_shape() -> None:
         assert p.orchestrator_model == "xai/grok-4.3", p.name
 
 
+def test_deepseek_v4_pro_profile_matches_docs_shape() -> None:
+    """deepseek-v4-pro: a single max-effort profile, no sampling knobs."""
+    profiles = [p for p in all_profiles() if p.family == "deepseek-v4-pro"]
+    assert len(profiles) == 1
+    p = profiles[0]
+    ea = p.orchestrator_extra_args
+    assert p.name == "deepseek-v4-pro-max"
+    assert p.provider == "deepseek"
+    assert p.orchestrator_model == "deepseek/deepseek-v4-pro"
+    assert ea == {
+        "api_base": "https://api.deepseek.com",
+        "extra_body": {
+            "thinking": {
+                "type": "enabled",
+                "reasoning_effort": "max",
+            }
+        },
+        "timeout": 1800,
+    }
+
+
 def test_no_claude_profile_registered() -> None:
     """Claude/Bedrock is deferred in lockstep with apex-bench."""
     for p in all_profiles():
@@ -251,7 +281,8 @@ def test_no_claude_profile_registered() -> None:
 def test_archipelago_passes_model_string_verbatim() -> None:
     """Both vendor LiteLLM call sites must pass the model name string straight
     through to ``litellm.acompletion(model=...)`` -- this is the load-bearing
-    invariant that lets us register gpt-5.5 / grok-4.3 with zero vendor patches."""
+    invariant that lets us register gpt-5.5 / grok-4.3 / deepseek-v4-pro
+    with zero vendor patches."""
     agents_llm = (archipelago_agents_dir() / "runner" / "utils" / "llm.py").read_text(
         encoding="utf-8"
     )

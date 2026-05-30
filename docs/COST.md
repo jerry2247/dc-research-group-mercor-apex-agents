@@ -15,9 +15,10 @@ move month-over-month. Treat them as order-of-magnitude.
 | One full domain (160 tasks per profile) | 160 | $20-$150 | Headline per-domain number, 7-15 hours wall time. |
 | Full benchmark (480 tasks per profile) | 480 | $60-$450 | The "official-style" run. ~1 day wall time per profile. |
 
-Multiplied by **7 profiles** for an all-profiles sweep, the full
-benchmark sits in the $500-$3,000 range per pass. Most research
-iterations should stay in the per-domain pilot tier.
+Multiplied by **8 profiles** for an all-profiles sweep, the full
+benchmark sits in the $500-$3,000 range per pass before any DeepSeek
+pricing drift. Most research iterations should stay in the per-domain
+pilot tier.
 
 ## What costs what
 
@@ -38,8 +39,8 @@ well under $50.
 
 ## Profile-by-profile expected cost per task
 
-Very rough, based on per-profile prompt/completion mix at OpenAI's and
-xAI's published prices as of 2026-05:
+Very rough, based on per-profile prompt/completion mix at provider
+published prices as of 2026-05:
 
 | Profile | Per task | Notes |
 |---|---|---|
@@ -50,6 +51,7 @@ xAI's published prices as of 2026-05:
 | `grok-4.3-low` | $0.15-$0.40 | Cheap; xAI's tier. |
 | `grok-4.3-medium` | $0.30-$0.70 | |
 | `grok-4.3-high` | $0.60-$1.40 | |
+| `deepseek-v4-pro-max` | Check current DeepSeek pricing | DeepSeek V4 Pro max-effort profile; pricing can change quickly. |
 
 Judge (`gpt-5.5` medium) adds ~$0.05-$0.20 per task on top, regardless
 of agent profile.

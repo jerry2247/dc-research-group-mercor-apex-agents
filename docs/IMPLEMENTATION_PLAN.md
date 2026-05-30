@@ -14,7 +14,7 @@ actually stands:
   default and gated behind `--dc-rs` / `--trace`.
 - **The active rollout follows the pre-registered per-(domain, world,
   method) order in [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md) using the
-  `grok-4.3-high` profile** — not the 7-profile × `--limit 10` pilot
+  `grok-4.3-high` profile** — not the all-profile × `--limit 10` pilot
   sketched in Phase 2. As of this writing, the baseline and DC-RS have
   completed **Investment Banking worlds 1–2** and TRACE has completed
   **world 1**; numbers are in [`../results.md`](../results.md).
@@ -43,7 +43,7 @@ Goal: run one task end-to-end against both `gpt-5.5-medium` and
 Steps:
 
 1. `make setup` on a clean machine.
-2. Set keys in `.env` (`OPENAI_API_KEY`, `XAI_API_KEY`, `HF_TOKEN`).
+2. Set keys in `.env` (`OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `HF_TOKEN`).
 3. `make docker-check` -- daemon up, env image buildable.
 4. `make fetch-dataset` -- task + world index downloaded.
 5. `apex-agents-bench smoke --model gpt-5.5-medium` -- one task E2E.
@@ -59,7 +59,7 @@ and a non-zero score on at least 1/N criteria. Wall time per smoke
 
 Goal: produce a usable cross-method comparison table.
 
-For each of the 7 agent profiles, run:
+For each of the 8 agent profiles, run:
 
 ```bash
 apex-agents-bench run --model <profile> --domain "Investment Banking"   --limit 10
@@ -67,9 +67,10 @@ apex-agents-bench run --model <profile> --domain "Management Consulting" --limit
 apex-agents-bench run --model <profile> --domain Law                     --limit 10
 ```
 
-That's 7 profiles × 30 tasks = 210 task runs. Estimated cost:
-~$50-100 total at GPT-5.5 medium pricing (see `docs/COST.md`).
-Estimated wall time: 210 × ~3 min / max-parallel-1 ≈ 11 hours (we run
+That's 8 profiles × 30 tasks = 240 task runs. Estimated cost:
+~$50-100 total at GPT-5.5 medium pricing, plus provider-specific DeepSeek
+costs (see `docs/COST.md`).
+Estimated wall time: 240 × ~3 min / max-parallel-1 ≈ 12 hours (we run
 sequentially by default).
 
 **Gate to Phase 3**: per-domain mean scores are non-trivially different

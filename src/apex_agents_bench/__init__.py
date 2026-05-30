@@ -12,7 +12,7 @@ Public surface:
     apex_agents_bench.dataset        -- APEX-Agents task / rubric / world loader
     apex_agents_bench.world          -- world snapshot fetch + cache
     apex_agents_bench.docker_env     -- environment container orchestration
-    apex_agents_bench.agent_profile  -- agent profile registry (gpt-5.5-*, grok-4.3-*)
+    apex_agents_bench.agent_profile  -- agent profile registry (gpt-5.5-*, grok-4.3-*, deepseek-v4-pro-max)
     apex_agents_bench.judge          -- grading-settings + verifier builder
     apex_agents_bench.trajectory     -- trajectory log parsing
     apex_agents_bench.smoke          -- single-task end-to-end runner

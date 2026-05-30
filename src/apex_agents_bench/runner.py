@@ -415,6 +415,8 @@ def _required_api_key(model_id: str, provider: str | None = None) -> str | None:
         return "AZURE_API_KEY"
     if provider == "xai" or model_id.startswith(("xai/", "grok")):
         return "XAI_API_KEY"
+    if provider == "deepseek" or model_id.startswith(("deepseek/", "deepseek-")):
+        return "DEEPSEEK_API_KEY"
     if provider == "openai" or model_id.startswith(("openai/", "gpt-", "o1", "o3", "o4")):
         return "OPENAI_API_KEY"
     if provider == "anthropic-bedrock" or model_id.startswith("bedrock/"):

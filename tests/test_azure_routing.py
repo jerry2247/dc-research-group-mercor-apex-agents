@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
-
 from apex_agents_bench.azure_routing import (
     AzureConfig,
     route_model_id,
@@ -36,6 +34,7 @@ def test_route_on_with_explicit_deployment() -> None:
 def test_route_on_non_gpt55_is_identity() -> None:
     cfg = AzureConfig(enabled=True)
     assert route_model_id("xai/grok-4.3-high", cfg=cfg) == "xai/grok-4.3-high"
+    assert route_model_id("deepseek/deepseek-v4-pro", cfg=cfg) == "deepseek/deepseek-v4-pro"
     assert route_model_id("anthropic/claude-3", cfg=cfg) == "anthropic/claude-3"
     assert route_model_id("text-embedding-3-large", cfg=cfg) == "text-embedding-3-large"
 
@@ -51,6 +50,7 @@ def test_required_api_key_recognizes_azure() -> None:
 
     assert _required_api_key("azure/gpt-5.5") == "AZURE_API_KEY"
     assert _required_api_key("openai/gpt-5.5") == "OPENAI_API_KEY"
+    assert _required_api_key("deepseek/deepseek-v4-pro", "deepseek") == "DEEPSEEK_API_KEY"
 
 
 def test_run_options_default_azure_is_off() -> None:

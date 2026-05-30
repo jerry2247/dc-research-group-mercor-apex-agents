@@ -15,7 +15,7 @@ from apex_agents_bench.agent_profile import (
 
 def test_registry_has_expected_families() -> None:
     families = {p.family for p in all_profiles()}
-    assert families == {"gpt-5.5", "grok-4.3"}
+    assert families == {"gpt-5.5", "grok-4.3", "deepseek-v4-pro"}
 
 
 def test_profile_names_are_unique() -> None:
@@ -33,6 +33,11 @@ def test_grok43_has_three_efforts() -> None:
     assert names == {"grok-4.3-low", "grok-4.3-medium", "grok-4.3-high"}
 
 
+def test_deepseek_v4_pro_has_only_max_effort() -> None:
+    names = {p.name for p in all_profiles() if p.family == "deepseek-v4-pro"}
+    assert names == {"deepseek-v4-pro-max"}
+
+
 def test_get_profile_unknown_name_helpful_error() -> None:
     with pytest.raises(KeyError, match="Unknown agent profile"):
         get_profile("does-not-exist")
@@ -45,9 +50,10 @@ def test_get_profile_suggests_family_matches() -> None:
 
 def test_profiles_by_family_groups_correctly() -> None:
     g = profiles_by_family()
-    assert set(g.keys()) == {"gpt-5.5", "grok-4.3"}
+    assert set(g.keys()) == {"gpt-5.5", "grok-4.3", "deepseek-v4-pro"}
     assert len(g["gpt-5.5"]) == 4
     assert len(g["grok-4.3"]) == 3
+    assert len(g["deepseek-v4-pro"]) == 1
 
 
 def test_to_extra_args_json_returns_copy() -> None:

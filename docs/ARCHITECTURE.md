@@ -15,7 +15,7 @@ apex-agents-bench/
 │   ├── dataset.py                   tasks_and_rubrics.json + worlds loader
 │   ├── world.py                     HF fetch + cache + materialize
 │   ├── docker_env.py                Environment container lifecycle
-│   ├── agent_profile.py             7 agent profiles (gpt-5.5-*, grok-4.3-*)
+│   ├── agent_profile.py             8 agent profiles (gpt-5.5-*, grok-4.3-*, deepseek-v4-pro-max)
 │   ├── trajectory.py                Parse vendor's trajectory + grades JSON
 │   ├── judge.py                     Build grading_settings + verifiers + scoring
 │   ├── smoke.py                     Single-task E2E

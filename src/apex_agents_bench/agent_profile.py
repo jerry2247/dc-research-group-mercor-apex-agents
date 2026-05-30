@@ -5,7 +5,8 @@ combination. We use named profiles instead of free-form CLI flags so that:
 
   1. The set of models we run against is explicit and reviewable.
   2. Per-provider config quirks (``reasoning_effort`` vs ``thinking_tokens``,
-     OpenAI's ``verbosity``, Grok's ``temperature``) live in one place.
+     OpenAI's ``verbosity``, Grok's ``temperature``, DeepSeek's ``max``
+     effort) live in one place.
   3. A run's record can persist a single profile name and be reproduced
      exactly later.
 
@@ -48,8 +49,8 @@ class AgentProfile:
     """Display family: ``gpt-5.5``, ``grok-4.3``, ..."""
 
     provider: str
-    """``openai`` | ``xai`` | ``anthropic-bedrock``. Affects which API key
-    must be set."""
+    """``openai`` | ``xai`` | ``deepseek`` | ``anthropic-bedrock``. Affects
+    which API key must be set."""
 
     orchestrator_model: str
     """LiteLLM-routable string. E.g. ``openai/gpt-5.5``."""
@@ -84,6 +85,17 @@ class AgentProfile:
 #   - temperature: accepted; we use 0.8 to mirror apex-bench's choice (which
 #     mirrors Mercor's apex-evals upstream grok-4-0709 entry).
 #   - LiteLLM routing: ``xai/grok-4.3``.
+#
+# DeepSeek V4 Pro
+#   - reasoning_effort: high | max. We register ONLY max, by policy.
+#   - DeepSeek documents max effort as `thinking.reasoning_effort=max`.
+#     LiteLLM 1.83.x collapses top-level `reasoning_effort` into
+#     `thinking: {"type": "enabled"}` for the native deepseek/ adapter, so
+#     we send the exact DeepSeek body through `extra_body`.
+#   - temperature/top_p are omitted; DeepSeek's thinking-mode docs say they
+#     have no effect in thinking mode.
+#   - LiteLLM routing: ``deepseek/deepseek-v4-pro`` with the official
+#     OpenAI-compatible base URL.
 #
 # Anthropic Claude on AWS Bedrock -- DEFERRED.
 #   The Archipelago call path passes the model string through to LiteLLM
@@ -149,6 +161,31 @@ for _effort in ("low", "medium", "high"):
             notes=f"xAI Grok 4.3, reasoning_effort={_effort}, temperature=0.8.",
         )
     )
+
+# --- DeepSeek V4 Pro --------------------------------------------------------
+
+_add(
+    AgentProfile(
+        name="deepseek-v4-pro-max",
+        family="deepseek-v4-pro",
+        provider="deepseek",
+        orchestrator_model="deepseek/deepseek-v4-pro",
+        orchestrator_extra_args={
+            "api_base": "https://api.deepseek.com",
+            "extra_body": {
+                "thinking": {
+                    "type": "enabled",
+                    "reasoning_effort": "max",
+                }
+            },
+            # 1800s (30 min) per LLM call. See the gpt-5.5 block above
+            # for rationale; same LiteLLM 600s default is too short on
+            # long agent contexts.
+            "timeout": 1800,
+        },
+        notes="DeepSeek V4 Pro, thinking.reasoning_effort=max.",
+    )
+)
 
 # --- Anthropic Claude on AWS Bedrock -- DEFERRED ----------------------------
 # See module docstring for rationale. Sketched here for the future:

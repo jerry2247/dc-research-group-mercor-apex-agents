@@ -16,7 +16,7 @@ The two mechanisms are evaluated head-to-head on Mercor's APEX-Agents benchmark 
 A thin policy and orchestration layer over Mercor's Archipelago harness (`vendor/archipelago/`, vendored at commit `3f4a8234`). The vendored harness — system prompt, MCP server set, `react_toolbelt_agent` config, per-task fresh container, verifier construction, scoring config — is preserved exactly; this repository contributes:
 
 - **Two memory subsystems** that can be toggled via CLI flags; both are off by default. With either flag off the pipeline is byte-identical to the no-memory baseline (pinned by a fidelity test).
-- **Project policies** — judge model fixed to `gpt-5.5` (medium reasoning effort, Mercor's published judge); one run per (task, agent profile); a typed agent profile registry (`gpt-5.5-{low,medium,high,xhigh}`, `grok-4.3-{low,medium,high}`).
+- **Project policies** — judge model fixed to `gpt-5.5` (medium reasoning effort, Mercor's published judge); one run per (task, agent profile); a typed agent profile registry (`gpt-5.5-{low,medium,high,xhigh}`, `grok-4.3-{low,medium,high}`, `deepseek-v4-pro-max`).
 - **One documented vendor patch** (`vendor/archipelago/PATCHES.md`) — a `Dockerfile` build step that compiles the code-execution sandbox library (`sandbox_fs.so`) — needed to make the published Archipelago example runnable end-to-end.
 
 | Subsystem | CLI flag | Ground-truth signal | Spec |

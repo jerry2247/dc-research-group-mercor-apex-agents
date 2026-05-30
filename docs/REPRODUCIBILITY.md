@@ -13,7 +13,7 @@ pass@1 (one run) and sometimes pass@8 (eight runs). We use pass@1 for
 every reported number.
 
 **Why one run, not eight?** Eight runs multiplies our cost-per-cell by
-8x. Across 7 agent profiles × 480 tasks, eight runs would be ~$1k/cell.
+8x. Across 8 agent profiles × 480 tasks, eight runs would be ~$1k/cell.
 Variance signal is recovered from per-domain bins (160 tasks each) and
 per-criterion granularity (mean 4.06 criteria/task -> ~649 binary
 judgments per per-domain cell, ~1,949 per full run). We accept that
@@ -46,7 +46,8 @@ judge and agent are the same model family. This introduces a known
 self-enhancement bias (judge LLMs grade their own family more
 generously). We accept this as a known caveat -- documented in this
 file and in `docs/AUDIT.md` -- and compute it side-by-side with the
-non-family pair (`grok-4.3-*` agent + `gpt-5.5` judge) as a
+non-family pairs (`grok-4.3-*` / `deepseek-v4-pro-max` agents +
+`gpt-5.5` judge) as a
 sanity-check.
 
 **Enforced at**: `apex_agents_bench.config.DEFAULT_JUDGE_MODEL`,
@@ -83,7 +84,8 @@ runner refuses a hand-edited MCP config that subsets at run time.
 
 Archipelago's LiteLLM call sites pass model names verbatim (unlike
 apex-evals, which had a `MODEL_MAPPINGS` allow-list), so the GPT-5.5 /
-Grok 4.3 surface needs **no** source patch. The one vendored change is
+Grok 4.3 / DeepSeek surface needs **no** source patch. The one vendored
+change is
 a build-time patch to `environment/Dockerfile` that compiles
 `sandbox_fs.so` for the code-execution server (Patch 001 in
 `PATCHES.md`); there are zero patches to the Python runners.

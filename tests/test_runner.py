@@ -325,6 +325,23 @@ def test_preflight_credentials_fails_before_docker_when_keys_missing(
         _preflight_credentials(opts, [_t("a", "banking", "w1")], hf_token=None)
 
 
+def test_preflight_requires_deepseek_key_for_deepseek_profile(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+
+    settings = Settings.defaults().with_dataset_dir(tmp_path)
+    world_dir = tmp_path / "world_files_zipped"
+    world_dir.mkdir(parents=True)
+    (world_dir / "w1.zip").write_bytes(b"not-a-real-zip-but-preflight-only")
+    opts = _opts(settings=settings, profile=get_profile("deepseek-v4-pro-max"))
+
+    with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+        _preflight_credentials(opts, [_t("a", "banking", "w1")], hf_token=None)
+
+
 def test_preflight_requires_hf_for_uncached_task_input_subsystems(
     tmp_path: Path, monkeypatch
 ) -> None:
