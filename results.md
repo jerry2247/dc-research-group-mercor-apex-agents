@@ -67,10 +67,12 @@ On **Investment Banking** the dominant gain is converting trajectory-level non-c
 
 ## Where DC-RS loses
 
-The two losses outside IB are worth recording rather than hiding:
+The four losses, all outside IB, are worth recording rather than hiding:
 
 - **MC `task_4bdc188e…`: 1.000 → 0.000** — baseline solved it; with the cheatsheet, DC-RS did not.
+- **MC `task_0cc6381a…`: 0.556 → 0.444** — baseline reached 5/9 criteria; DC-RS reached 4/9.
 - **Law `task_fe1efa5d…`: 1.000 → 0.500** — baseline aced a North-Carolina compliance task (2/2); DC-RS got 1/2.
+- **Law `task_1d7f4e0be…`: 0.100 → 0.000** — baseline scraped 1/10 criteria; DC-RS reached 0/10.
 
 These show the cheatsheet is not strictly beneficial: on tasks the no-memory agent already handles, injected reference material can occasionally distract. The net effect is still strongly positive (16 wins vs 4 losses across the four worlds), but the regressions are real and motivate the entry-quality auditing tracked separately.
 
@@ -154,7 +156,7 @@ Both arms finalized all 20 tasks.
 | `task_4fa914d8c…` | 0.200 | 0.200 |
 | `task_ccee33f38…` | 0.000 | **0.667** |
 | `task_908f411c4…` | 0.000 | **0.250** |
-| `task_374272038…` | 0.000 | **0.286** |
+| `task_374272038…` | 0.143 | **0.286** |
 
 Raw CSVs: [`runs/grok43high-baseline/results.csv`](runs/grok43high-baseline/results.csv), [`runs/grok43high-dc-rs/results.csv`](runs/grok43high-dc-rs/results.csv), [`runs/grok43high-trace/results.csv`](runs/grok43high-trace/results.csv). Per-task trajectories: `runs/<run>/task_<id>/trajectory.json`. Per-domain DC-RS state: `runs/grok43high-dc-rs/dc_rs/<Domain>/` (`bank.jsonl`, `cheatsheet.txt`, `cheatsheets/task_<id>.txt`, `synthesizer_log.jsonl`). Per-domain TRACE state: `runs/grok43high-trace/trace/<Domain>/`.
 
