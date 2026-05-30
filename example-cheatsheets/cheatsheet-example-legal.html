@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamic Cheatsheet — Legal</title>
+<style>
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:#ffffff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#2c3340;
+    padding:40px 20px;
+  }
+  .playbook{
+    max-width:880px;
+    margin:0 auto;
+    background:#f5f8fc;
+    border:1px solid #d6deea;
+    border-radius:16px;
+    padding:10px;
+    box-shadow:0 10px 30px rgba(40,60,100,.08);
+  }
+
+  .title-bar{
+    background:linear-gradient(90deg,#4f6fe0,#4257c9);
+    border-radius:10px;
+    padding:13px 18px;
+    text-align:center;
+    color:#fff;
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:.01em;
+    margin-bottom:6px;
+  }
+
+  .section-bar{
+    background:linear-gradient(90deg,#7e93cf,#5b73be);
+    border-radius:8px;
+    padding:9px 15px;
+    color:#fff;
+    font-weight:700;
+    font-size:12.5px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    margin:16px 4px 12px;
+  }
+
+  .entry{
+    border-left:3px solid var(--rail,#4f7be0);
+    padding:1px 10px 1px 14px;
+    margin:0 6px 16px;
+  }
+  .entry .desc{
+    font-size:13.5px;
+    line-height:1.55;
+    color:#2c3340;
+    margin:0;
+  }
+  .entry pre{
+    margin:8px 0 0;
+    background:#eceff4;
+    border:1px solid #d8deea;
+    border-radius:8px;
+    padding:10px 13px;
+    overflow-x:auto;
+  }
+  .entry code{
+    font-family:"SF Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px;
+    line-height:1.5;
+    color:#4a5160;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+
+  @media print{
+    body{padding:0}
+    .playbook{box-shadow:none;border:none}
+    .entry{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<div class="playbook">
+
+  <div class="title-bar">The Generated DC-RS Cheatsheet on APEX-Agents (Legal)</div>
+
+  <!-- ===== Section 1 ===== -->
+  <div class="section-bar">Reusable Code and Tool-Call Snippets</div>
+
+  <div class="entry" style="--rail:#6a5acd">
+    <p class="desc">To extract specific text from a PDF (such as statute sections or legal provisions), first call pdf_server_pdf with action=&quot;search&quot; using the key term or citation as query (case-insensitive), then follow with action=&quot;read_pages&quot; on the returned page number(s). Use max_results=5 and context_chars=100 for search.</p>
+    <pre><code>pdf_server_pdf({&quot;request&quot;:{&quot;action&quot;:&quot;search&quot;,&quot;file_path&quot;:&quot;/Reorganization/State Statutes/&lt;STATE&gt;/&lt;pdfname&gt;.pdf&quot;,&quot;query&quot;:&quot;194A.713&quot;,&quot;case_sensitive&quot;:false,&quot;max_results&quot;:5,&quot;context_chars&quot;:100}})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#6a5acd">
+    <p class="desc">To read multi-page .docx agreements, call docs_server_docs with action=&quot;read_content&quot; and page_index (starting at 0) to retrieve paragraphs sequentially; repeat for additional pages as needed. Paths must start with / and end with .docx.</p>
+    <pre><code>docs_server_docs({&quot;request&quot;:{&quot;action&quot;:&quot;read_content&quot;,&quot;file_path&quot;:&quot;/Magnolia Documents/Contracts/&lt;agreement&gt;.docx&quot;,&quot;page_index&quot;:0}})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#6a5acd">
+    <p class="desc">To create a new .docx document (e.g., a legal memorandum or analysis), call docs_server_docs with action=&quot;create&quot;, specifying directory (folder path) and file_name (ending with .docx) separately, along with content as an array of valid content blocks (each object must have a &quot;type&quot; field such as &quot;heading&quot; or &quot;paragraph&quot; with required fields populated; empty objects or incorrect parameter names like file_path will fail validation).</p>
+    <pre><code>docs_server_docs({&quot;request&quot;:{&quot;action&quot;:&quot;create&quot;,&quot;directory&quot;:&quot;/Litigation Strategy/Wrongful Death Documents/&lt;case_name&gt;&quot;,&quot;file_name&quot;:&quot;Memo.docx&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;heading&quot;,&quot;text&quot;:&quot;Title&quot;,&quot;level&quot;:1},{&quot;type&quot;:&quot;paragraph&quot;,&quot;text&quot;:&quot;Body text here.&quot;}]}})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#6a5acd">
+    <p class="desc">To compute dates, day of week, or time intervals in the sandbox when direct Python execution fails, use code_execution_server_code_exec with a shell date command (e.g., date -d &#x27;YYYY-MM-DD&#x27; +%A or similar formatting).</p>
+    <pre><code>code_execution_server_code_exec({&quot;request&quot;:{&quot;code&quot;:&quot;date -d &#x27;2025-08-06&#x27; +%A&quot;}})</code></pre>
+  </div>
+
+  <!-- ===== Section 2 ===== -->
+  <div class="section-bar">Solution Strategies for Recurring Task Shapes</div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For compliance reviews of assisted living residency agreements against state statutes, first locate and extract the exact statutory requirement(s) from the state PDF, then read the target agreement document(s) page-by-page, and compare each enumerated statutory element against the agreement language for presence or omission. When multiple similar agreement files exist, select the most general or state-matched version rather than a state-specific variant.</p>
+    <pre><code>Locate statute PDF → search/read target section → read agreement → map each statutory item (e.g., notice periods, fee provisions) to agreement text.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For evaluating a motion for summary judgment on a wrongful death claim including a crumbling skull rule affirmative defense, locate the complaint, moving party&#x27;s expert report or affidavit (e.g., on cause of death), and opposing evidence such as a deposition; assess admissibility of the expert opinions (qualified expert, reliable basis in case-file facts, not speculation) and whether any evidence raises a genuine issue of material fact on whether the negligence accelerated the pre-existing deterioration. If factual disputes exist on key elements or the defense, the motion is likely denied.</p>
+    <pre><code>Locate complaint and Expert Witness Opinion Letter.docx in litigation folder → read deposition of key witness (e.g., on care protocols) → compare evidence for triable issues on duty, breach, causation, and crumbling skull acceleration under civil procedure rules.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For compliance reviews against specific regulatory sections (e.g., NY Part 487 on meals/snacks, TX Chapter 276 on deposits, KY 194A.713 on notice, or CA CCR Title 22 §87507), locate the relevant PDF in /Reorganization/State Statutes/&lt;STATE&gt;/ or root-level rules PDFs, use pdf_server_pdf search for key terms (multiple targeted searches if needed), read_pages on matches, and compare provided operational facts against the exact rule language.</p>
+    <pre><code>Locate state PDF → search for regulation keywords (e.g., &quot;meals&quot;, &quot;snacks&quot;, &quot;pet deposit&quot;, &quot;service animal&quot;, &quot;87507&quot;) → read relevant pages → check if facts satisfy the rule.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For determining if submitting a matter to arbitration is consistent with a litigation plan and the relevant residency agreement (e.g., in Texas cases involving specific residents), locate the litigation plan in /Litigation Strategy/Strategy Docs/ and the resident-specific residency agreement in /Magnolia Documents/Contracts/, read both documents page-by-page using docs_server_docs action=&quot;read_content&quot;, extract arbitration-related clauses from the agreement and any strategy directives from the plan, then compare for alignment or conflict (e.g., if the agreement requires arbitration or the plan prefers court litigation).</p>
+    <pre><code>Locate plan and TX residency agreement → read plan for arbitration stance → read agreement for clause → assess consistency.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For breach of contract claims alleging failure to provide specific services like weekly family communication updates in assisted living residency agreements, locate the resident-specific agreement (e.g., TX Grove Residency Agreement Whitaker Thomas 2023.docx or equivalent in Whitaker File), read_content across multiple pages to extract all enumerated services and obligations, and check for explicit language on communication frequency or family notifications; if absent, the strongest argument is that no such contractual duty exists; the counterargument may rely on the care plan, resident handbook, or implied duty of good faith.</p>
+    <pre><code>Locate agreement → read pages for services section → check for &quot;weekly&quot;, &quot;communication&quot;, &quot;family update&quot; → argue absence = no obligation; counter: implied from care obligations.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#4f7be0">
+    <p class="desc">For revising a resident-specific residency agreement (e.g., TX Grove Residency Agreement Whitaker Thomas 2023.docx) into a general template for new residents, locate the file in /Magnolia Documents/Contracts/, read its content to locate specific sections and paragraphs (such as paragraph J in section IV), apply updates from the referenced operations manual (e.g., 2025 version) to the last sentence, then create a new .docx file with the revised content using docs_server_docs action=&quot;create&quot; with directory and file_name for the template.</p>
+    <pre><code>Locate agreement → read pages to identify section IV paragraph J → update last sentence per 2025 manual → docs_server_docs create new template with modified content blocks.</code></pre>
+  </div>
+
+  <!-- ===== Section 3 ===== -->
+  <div class="section-bar">Formulas, Definitions, and Conventions</div>
+
+  <div class="entry" style="--rail:#2fa37c">
+    <p class="desc">KRS 194A.713(7) and analogous state provisions require a minimum 30-day notice for fee structure changes in assisted living lease agreements; absence of any such notice language constitutes non-compliance.</p>
+    <pre><code>Statutory element (7): &quot;Minimum thirty (30) day notice provision for a change in the community&#x27;s fee structure.&quot;</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#2fa37c">
+    <p class="desc">KRS 194A.713(14) requires that an assisted living lease agreement include grievance policies that minimally address issues related to confidentiality of complaints and the process for resolving grievances between the resident and the assisted living community; absence of such policies constitutes non-compliance.</p>
+    <pre><code>Statutory element (14): &quot;Grievance policies that minimally address issues related to confidentiality of complaints and the process for resolving grievances between the resident and the assisted living community.&quot;</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#2fa37c">
+    <p class="desc">The crumbling skull rule limits a defendant&#x27;s tort liability to damages caused by accelerating or worsening a pre-existing condition that was independently deteriorating; the defendant is not responsible for the natural progression of the condition. This contrasts with the eggshell skull rule, which holds the defendant liable for all consequences regardless of the plaintiff&#x27;s pre-existing susceptibility. In New York wrongful death cases, an admissible expert report on cause of death (qualified expert, grounded in case facts, non-speculative) can support a crumbling skull affirmative defense on summary judgment.</p>
+    <pre><code>Crumbing skull analysis: if expert report demonstrates death would have occurred from independent progression of brittle diabetes and comorbidities, liability limited to any additional harm from negligence.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#2fa37c">
+    <p class="desc">KRS 194A.713(8) requires that an assisted living lease agreement include a minimum thirty (30) day move-out notice provision for resident nonpayment, subject to applicable landlord or tenant laws; absence of such language constitutes non-compliance.</p>
+    <pre><code>Statutory element (8): &quot;Minimum thirty (30) day move-out notice provision for resident nonpayment, subject to applicable landlord or tenant laws.&quot;</code></pre>
+  </div>
+
+  <!-- ===== Section 4 ===== -->
+  <div class="section-bar">Environment and Sandbox Facts</div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">State statutes for assisted living compliance are stored under /Reorganization/State Statutes/&lt;STATE ABBREV&gt;/ as PDFs (e.g., 194A_700-7205.pdf for Kentucky). Use filesystem_server_list_files or get_directory_tree on /Reorganization/State Statutes/ to discover available states.</p>
+    <pre><code>/Reorganization/State Statutes/KY/ contains 194A_700-7205.pdf and Regs 902 KAR 20 480.pdf</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">Magnolia-specific agreements reside in /Magnolia Documents/Contracts/; files include General Resident Agreement Template.docx and state-variant versions (e.g., Gardens Residency Agreement Martin Miller v1.docx for California).</p>
+    <pre><code>filesystem_server_list_files({&quot;path&quot;:&quot;/Magnolia Documents/Contracts&quot;})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">Litigation-related documents, including complaints, strategies, and case files for wrongful death, breach of contract, and assisted living matters, are stored under /Litigation Strategy/ with subfolders such as Assisted Living Litigation in General/ (containing PDFs), Breach of Contract Documents/ (containing complaints and related files), and Wrongful Death Documents/. Use filesystem_server_list_files or get_directory_tree on /Litigation Strategy/ to discover available files.</p>
+    <pre><code>/Litigation Strategy/ contains Assisted Living Litigation in General/, Breach of Contract Documents/, and Wrongful Death Documents/</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">Breach of contract complaints and related filings are stored under /Litigation Strategy/Breach of Contract Documents/ with possible subfolders such as Complaints/. Use filesystem_server_list_files on that path to locate original, first amended, and second amended versions.</p>
+    <pre><code>filesystem_server_list_files({&quot;path&quot;:&quot;/Litigation Strategy/Breach of Contract Documents&quot;})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">Case-specific wrongful death files (complaints, incident reports, depositions, affidavits, medical logs) are located in subfolders under /Litigation Strategy/Wrongful Death Documents/&lt;resident or case name e.g. Tom Buchanan&gt;/. List files there to find documents like Wrongful Death Complaint.docx or deposition transcripts.</p>
+    <pre><code>filesystem_server_list_files({&quot;path&quot;:&quot;/Litigation Strategy/Wrongful Death Documents/Tom Buchanan&quot;})</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">New York regulations (e.g., NYCRR Part 487 or Title 18 sections on assisted living) are stored under /Reorganization/State Statutes/NY/ as PDFs. Use filesystem_server_list_files on /Reorganization/State Statutes/NY/ or root-level rules PDFs to locate files covering meals, snacks, or operational requirements.</p>
+    <pre><code>/Reorganization/State Statutes/NY/ contains relevant PDFs for NYCRR compliance checks.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">California regulations (e.g., CCR Title 22 sections on residential care facilities for the elderly) are stored under /Reorganization/State Statutes/CA/ as PDFs. Use filesystem_server_list_files on /Reorganization/State Statutes/CA/ to locate files covering resident agreements or operational requirements.</p>
+    <pre><code>/Reorganization/State Statutes/CA/ contains relevant PDFs for CCR Title 22 compliance checks.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">North Carolina regulations for Adult Care Homes (e.g., 10A NCAC 13F) are stored under /Reorganization/State Statutes/NC/ as PDFs. Use filesystem_server_list_files on /Reorganization/State Statutes/NC/ to locate files for compliance checks on facility features.</p>
+    <pre><code>/Reorganization/State Statutes/NC/ contains relevant PDFs for 10A NCAC compliance checks.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#c98a2b">
+    <p class="desc">Litigation plans and strategy documents are stored under /Litigation Strategy/Strategy Docs/. Use filesystem_server_list_files on /Litigation Strategy/ to discover subfolders including Strategy Docs/.</p>
+    <pre><code>filesystem_server_list_files({&quot;path&quot;:&quot;/Litigation Strategy/&quot;})</code></pre>
+  </div>
+
+  <!-- ===== Section 5 ===== -->
+  <div class="section-bar">Pitfalls, Edge Cases, and Verification Checks</div>
+
+  <div class="entry" style="--rail:#d65573">
+    <p class="desc">When multiple residency agreement files exist, verify the selected file matches the task scope (general template vs. state-specific or resident-specific version) before comparison; California RCFE forms may contain 60-day notice language that satisfies a 30-day minimum but is irrelevant to other states.</p>
+    <pre><code>Confirm agreement file name and content scope before mapping to statute (e.g., avoid using CA-specific form for KY compliance check).</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#d65573">
+    <p class="desc">When creating new .docx files with docs_server_docs action=&quot;create&quot;, the content parameter must be a list of valid block objects (each with a &quot;type&quot; field such as &quot;heading&quot; or &quot;paragraph&quot;); passing empty objects, empty lists, or structures missing the type tag causes repeated validation errors. Always specify directory and file_name separately.</p>
+    <pre><code>Use content=[{&quot;type&quot;:&quot;heading&quot;,&quot;text&quot;:&quot;Title&quot;,&quot;level&quot;:1},{&quot;type&quot;:&quot;paragraph&quot;,&quot;text&quot;:&quot;Body text.&quot;}] ; do not pass {} or invalid tags.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#d65573">
+    <p class="desc">For tasks involving identification of objectionable testimony in deposition transcripts under a cited evidence rule (such as NY Rule of Evidence 10.03), locate and read the deposition file (e.g., Nurse Deposition.docx) using sequential read_content calls to access the specific paragraph referenced in the task, then analyze statements for violations like lack of personal knowledge, speculation, or hearsay.</p>
+    <pre><code>Use docs_server_docs to read Nurse Deposition.docx pages until paragraph 8 is located; flag statements in that paragraph that fail the rule&#x27;s requirements for admissibility.</code></pre>
+  </div>
+
+  <div class="entry" style="--rail:#d65573">
+    <p class="desc">When checking compliance with a specific regulation (e.g., NY Part 487 on meal planning or similar), confirm the exact statutory text and requirements match the scenario facts (such as advance planning interval or snack frequency) before concluding compliance or non-compliance; search multiple related terms if initial results are narrow.</p>
+    <pre><code>Confirm the regulatory text on &quot;meals&quot; or &quot;snacks&quot; directly addresses the provided operational detail (e.g., planning two and a half weeks in advance) before using it.</code></pre>
+  </div>
+
+</div>
+
+</body>
+</html>
