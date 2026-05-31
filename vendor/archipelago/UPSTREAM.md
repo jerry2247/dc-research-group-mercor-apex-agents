@@ -27,10 +27,8 @@ build-time change to `environment/Dockerfile` (Patch 001), which compiles
 `sandbox_fs.so` for the code-execution server; there are **zero patches to
 the Archipelago Python source**. The Archipelago call path through LiteLLM
 (`agents/runner/utils/llm.py` and `grading/runner/utils/llm.py`) passes the
-model name string through verbatim, so unlike `apex-evals` (which validates
-against a `MODEL_MAPPINGS` allow-list and required a 2-line patch to add
-`gpt-5.5` and `grok-4.3`) we do not need any vendor edit to use our chosen
-test or judge models.
+model name string through verbatim, so we do not need any vendor edit to
+use our chosen test or judge models.
 
 If a future patch is unavoidable, each must:
 
@@ -67,7 +65,7 @@ make install check
 | Path | Role |
 |---|---|
 | `agents/runner/main.py` | Agent entry point (invoked as `python -m runner.main ...`). |
-| `agents/runner/agents/registry.py` | `AGENT_REGISTRY` -- where DC will plug in as a custom `agent_config_id` once it ships. |
+| `agents/runner/agents/registry.py` | `AGENT_REGISTRY` -- the vendor's agent registry. DC-RS and TRACE operate via runner hooks and prompt injection, so they do not register a custom `agent_config_id`. |
 | `agents/runner/agents/react_toolbelt_agent/main.py` | The published agent implementation we use by default. |
 | `agents/runner/utils/llm.py` | LiteLLM call site -- passes `orchestrator_model` string verbatim. No model allow-list. |
 | `grading/runner/main.py` | Grading entry point (invoked separately as `python -m runner.main ...`). |

@@ -6,10 +6,9 @@ domain is fully isolated: a Finance task's retrieval never sees Legal
 pairs, and the Legal cheatsheet does not carry over to Finance.
 
 Constructed once by the runner at the start of a run; mutated as tasks
-complete. This is the agentic port of the sibling apex-bench runtime;
-the only data-shape change is that each appended pool entry stores a
-``rendered_trajectory`` (a transcript of the agent's tool-use run)
-rather than a prose ``deliverable``.
+complete. Each appended pool entry stores a ``rendered_trajectory`` (a
+transcript of the agent's tool-use run) rather than a prose
+``deliverable``.
 """
 
 from __future__ import annotations

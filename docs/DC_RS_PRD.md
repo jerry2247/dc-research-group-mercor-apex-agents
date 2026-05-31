@@ -296,10 +296,10 @@ tests/test_dc_rs_curation.py      anti-wipe guard (rescue, pass-through, zero-to
 tests/test_dc_rs_extract.py       <cheatsheet> extraction, fallback, case-insensitivity, multiline
 ```
 
-CSV-schema fidelity is pinned by `test_dc_rs_off_csv_schema_unchanged`
-(baseline byte-identical when off) and
-`test_dc_rs_on_csv_extends_baseline_at_end` (DC-RS-on CSV preserves the
-baseline as a prefix), both referenced from `runner.py`.
+CSV-schema fidelity is pinned by `test_baseline_csv_has_no_dc_rs_columns`
+(baseline header when off) and `test_dc_rs_on_csv_extends_baseline_at_end`
+(DC-RS-on CSV preserves the baseline as a prefix), both in
+`tests/test_dc_rs_fidelity.py`.
 
 ## Run it
 

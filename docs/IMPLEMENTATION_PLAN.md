@@ -16,8 +16,9 @@ actually stands:
   method) order in [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md) using the
   `grok-4.3-high` profile** — not the all-profile × `--limit 10` pilot
   sketched in Phase 2. As of this writing, the baseline and DC-RS have
-  completed **Investment Banking worlds 1–2** and TRACE has completed
-  **world 1**; numbers are in [`../results.md`](../results.md).
+  completed **Investment Banking worlds 1–2, Management Consulting world
+  1, and Law world 1** (57 tasks), and TRACE has completed **IB world
+  1**; numbers are in [`../results.md`](../results.md).
 - **Phase 4 (Bedrock / Claude profiles)** — still deferred.
 
 ## Phase 0 — Repository bootstrap ✅ (this commit)
@@ -125,33 +126,27 @@ statistically meaningful lift over baseline on at least one (profile,
 domain) cell, with the lift visible across multiple seeds (we'll
 re-introduce N>1 for the DC-RS ablation specifically).
 
-## Phase 4 — Bedrock plumbing (joint with apex-bench)
+## Phase 4 — Bedrock plumbing (Claude profiles)
 
-Goal: enable Claude profiles on Bedrock in both apex-bench (for v1
-extended) and here (for agents), at the same time, on the same
-inference-profile prefixes.
+Goal: enable Claude profiles on AWS Bedrock for the agent.
 
-The apex-evals sister harness has no Bedrock plumbing on its own
-`call_llm` path (apex-bench documents this). Archipelago's LiteLLM
-call passes the model string through verbatim, so we *could* enable
-Claude here today by setting up AWS credentials and using the
-`bedrock/us.anthropic.claude-opus-4-6-v1:0` form. We hold off so the
-two repos' active model surface stays in lockstep -- enabling Claude
-here without enabling it in apex-bench would create a comparison
-asymmetry we'd then have to caveat.
+Archipelago's LiteLLM call passes the model string through verbatim, so
+we *could* enable Claude today by setting up AWS credentials and using
+the `bedrock/us.anthropic.claude-opus-4-6-v1:0` form. We currently hold
+off and keep the active model surface to the OpenAI, xAI, and DeepSeek
+profiles.
 
 When Phase 4 lands:
-1. apex-bench gets the necessary `apex-evals/src/call_llm` patch.
-2. We register `claude-opus-4.6-*`, `claude-sonnet-4.6-*`,
+1. We register `claude-opus-4.6-*`, `claude-sonnet-4.6-*`,
    `claude-haiku-4.5-*` profiles here (sketched in
    `src/apex_agents_bench/agent_profile.py::_DEFERRED_CLAUDE_PROFILES_NOTE`).
-3. `tests/test_fidelity.py::test_no_claude_profile_registered` flips to
+2. `tests/test_fidelity.py::test_no_claude_profile_registered` flips to
    an explicit registration check.
 
 ## Out of scope (for now)
 
 - **APEX-v1 (the older 200-task v1 benchmark)**: superseded by
-  v1-extended (which apex-bench targets).
+  v1-extended; not targeted here.
 - **Custom MCP servers**: we use the published 9-server set verbatim.
 - **Browser / web-search tool**: not in the published example;
   enabling it would change task semantics.

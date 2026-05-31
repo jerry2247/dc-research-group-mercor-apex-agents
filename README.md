@@ -1,21 +1,18 @@
 # apex-agents-bench
 
-Evaluation harness for **DC-RS** and **TRACE** — two test-time-learning subsystems — on Mercor's **APEX-Agents** benchmark (multi-turn agent on an MCP toolbelt: filesystem, sheets, code execution, mail, slides, docs, pdf, calendar, chat).
+Evaluation harness for research on **test-time learning in tool-using agents**, extending Mirac Suzgun et al.'s *Dynamic Cheatsheet* (2025) from the single-shot prose setting to multi-step agentic work on Mercor's **APEX-Agents** benchmark (a multi-turn agent on an MCP toolbelt: filesystem, sheets, code execution, mail, slides, docs, pdf, calendar, chat).
 
 ## Project context
 
-This repository sits inside a collaboration between two student teams at Stanford CS 224N, jointly mentored by Mirac Suzgun (Stanford SAIL NLP):
+This repository studies whether a language-model agent can learn at test time, accumulating a self-curated memory from its own past attempts and reusing it on later tasks. We extend **Dynamic Cheatsheet** (Suzgun et al., 2025) and its retrieval-synthesis variant **DC-RS** from the single-shot prose setting to the agentic one, evaluating it against a no-memory baseline on Mercor's APEX-Agents benchmark.
 
-- **DC-RS** (*Dynamic Cheatsheet — Retrieval Synthesis*) — a no-ground-truth memory mechanism, a faithful port of Suzgun et al.'s *Dynamic Cheatsheet: Test-Time Learning with Adaptive Memory* (2025) to the agentic setting, developed by Jerry Gu, Sabrina Yen-Ko, and Shurui Liu.
-- **TRACE** (*Tool-augmented Reasoning via Atomic Cheatsheet Editing*) — a memory mechanism that uses a per-task correctness bit, developed by Kyleen Liao, Roshen Nair, and Arnold Yang.
-
-The two mechanisms are evaluated head-to-head on Mercor's APEX-Agents benchmark in this repository, and on the single-shot prose surface (Mercor's APEX-v1-extended) in the [`apex-bench`](https://github.com/jerry2247/dc-research-group-mercor-apex) sister repository. Both repositories share the same subsystem implementations and audit policy.
+Work by Jerry Gu, Kyleen Liao, Shurui Liu, Roshen Nair, Arnold Yang, and Sabrina Yen-Ko, mentored by Mirac Suzgun (Stanford SAIL NLP).
 
 ## What this repository is
 
 A thin policy and orchestration layer over Mercor's Archipelago harness (`vendor/archipelago/`, vendored at commit `3f4a8234`). The vendored harness — system prompt, MCP server set, `react_toolbelt_agent` config, per-task fresh container, verifier construction, scoring config — is preserved exactly; this repository contributes:
 
-- **Two memory subsystems** that can be toggled via CLI flags; both are off by default. With either flag off the pipeline is byte-identical to the no-memory baseline (pinned by a fidelity test).
+- **A test-time memory subsystem** toggled via a CLI flag and off by default. With the flag off the pipeline is byte-identical to the no-memory baseline (pinned by a fidelity test).
 - **Project policies** — judge model fixed to `gpt-5.5` (medium reasoning effort, Mercor's published judge); one run per (task, agent profile); a typed agent profile registry (`gpt-5.5-{low,medium,high,xhigh}`, `grok-4.3-{low,medium,high}`, `deepseek-v4-pro-max`).
 - **One documented vendor patch** (`vendor/archipelago/PATCHES.md`) — a `Dockerfile` build step that compiles the code-execution sandbox library (`sandbox_fs.so`) — needed to make the published Archipelago example runnable end-to-end.
 
@@ -28,7 +25,7 @@ The benchmark dataset is Mercor's and is **not** redistributed; it is fetched at
 
 ## Results
 
-So far the rollout has completed, for the baseline and DC-RS, the **first world of all three domains** plus a second Investment Banking world (`grok-4.3-high` agent, gpt-5.5 judge); TRACE has been run on IB world 1 only. A non-finalizing agent loop writes no CSV row, so per-method completion counts differ; the figures below are means over the **full world** with each non-completion scored 0, which keeps the comparison same-denominator:
+So far the rollout has completed, for the baseline and DC-RS, the **first world of all three domains** plus a second Investment Banking world (`grok-4.3-high` agent, gpt-5.5 judge). A non-finalizing agent loop writes no CSV row, so per-method completion counts differ; the figures below are means over the **full world** with each non-completion scored 0, which keeps the comparison same-denominator:
 
 | Domain | worlds | tasks | Baseline | + DC-RS | DC-RS W / T / L |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -82,13 +79,12 @@ Code: see [`LICENSE`](LICENSE). Mercor's vendored harness and benchmark dataset 
 ## Citation
 
 ```bibtex
-@misc{gu_yenko_liu_2026_dc_rs,
-  title  = {DC-RS: Dynamic Cheatsheet — Retrieval Synthesis for
-            Test-Time Learning in Tool-Using Agents},
-  author = {Gu, Jerry and Yen-Ko, Sabrina and Liu, Shurui},
-  note   = {Mentor: Mirac Suzgun; faithful port of Suzgun et al. 2025
-            (arXiv:2504.07952) to the agentic setting},
-  year   = {2026}
+@misc{gu_liu_yenko_2026_dynamic_ledger,
+  title  = {Dynamic Ledger: Retrieval-Augmented Structured Memory for
+            Test-Time Learning},
+  author = {Gu, Jerry and Liu, Shurui and Yen-Ko, Sabrina},
+  year   = {2026},
+  url    = {https://drive.google.com/file/d/1I6vW9WQnt6tM2iVQPQpEAxS68Z0-IhGK/view}
 }
 
 @misc{liao_nair_yang_2026_trace,

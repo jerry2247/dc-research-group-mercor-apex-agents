@@ -15,9 +15,9 @@ Listing all profiles: ``apex-agents-bench models``.
 
 Adding a new profile is a code change here, not a CLI flag -- by design.
 
-Why no ``max_tokens`` / ``max_input_tokens`` here (unlike apex-bench's
-``test_models.py``): Archipelago's agent runner does not pass these into
-``ModelConfig`` because there is no ``ModelConfig`` -- it calls
+Why no ``max_tokens`` / ``max_input_tokens`` here: Archipelago's agent
+runner does not pass these into ``ModelConfig`` because there is no
+``ModelConfig`` -- it calls
 ``litellm.acompletion(model=..., messages=..., **extra_args)`` directly. The
 provider's defaults apply unless we explicitly include them in
 ``extra_args``. We do not, because Mercor's published example does not
@@ -74,16 +74,15 @@ class AgentProfile:
 #
 # OpenAI GPT-5.5
 #   - reasoning_effort: low | medium | high | xhigh. Default is medium.
-#   - verbosity: low | medium | high. We pin verbosity=medium to match
-#     apex-bench's sister profile registry.
+#   - verbosity: low | medium | high. We pin verbosity=medium.
 #   - temperature: GPT-5.5 in reasoning mode rejects custom temperature; we
 #     omit it.
 #   - LiteLLM routing: ``openai/gpt-5.5``.
 #
 # xAI Grok 4.3
 #   - reasoning_effort: low | medium | high (three tiers).
-#   - temperature: accepted; we use 0.8 to mirror apex-bench's choice (which
-#     mirrors Mercor's apex-evals upstream grok-4-0709 entry).
+#   - temperature: accepted; we use 0.8 to mirror Mercor's upstream
+#     grok-4-0709 entry.
 #   - LiteLLM routing: ``xai/grok-4.3``.
 #
 # DeepSeek V4 Pro
@@ -101,9 +100,8 @@ class AgentProfile:
 #   The Archipelago call path passes the model string through to LiteLLM
 #   verbatim, so technically `bedrock/us.anthropic.claude-opus-4-6-v1:0`
 #   would work AS SOON AS AWS credentials are configured. We still defer
-#   because apex-bench's sister project defers (no Bedrock plumbing on the
-#   apex-evals side yet) and we want the two repos' active model surface to
-#   stay in lockstep until Bedrock lands jointly. See
+#   it for now and keep the active model surface to the OpenAI, xAI, and
+#   DeepSeek profiles. See
 #   ``docs/IMPLEMENTATION_PLAN.md`` Phase 2.
 
 
@@ -190,7 +188,7 @@ _add(
 # --- Anthropic Claude on AWS Bedrock -- DEFERRED ----------------------------
 # See module docstring for rationale. Sketched here for the future:
 _DEFERRED_CLAUDE_PROFILES_NOTE = """
-Claude profile shape (to be enabled once apex-bench's Bedrock plumbing lands):
+Claude profile shape (to be enabled once Bedrock plumbing lands):
 
   claude-opus-4.6:   bedrock/us.anthropic.claude-opus-4-6-v1:0
   claude-sonnet-4.6: bedrock/us.anthropic.claude-sonnet-4-6-v1:0

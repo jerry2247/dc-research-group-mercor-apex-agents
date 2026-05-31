@@ -44,13 +44,12 @@ still exists in the new vendor source.
 **Regression test**: TBD — a fidelity test should assert the
 `# vendored-patch: compile sandbox_fs.so` marker is present in the Dockerfile.
 
-## Why no patch is needed for `gpt-5.5` / `grok-4.3`
+## Why no patch is needed for the test/judge models
 
-`apex-bench`'s sister vendor (`vendor/apex_evals/`) required a 2-line patch
-to `src/call_llm/litellm_client.py` because Mercor's `apex-evals` harness
-gates model ids through a `MODEL_MAPPINGS` exact-match dict before calling
-LiteLLM. Archipelago is different: both call sites pass the model string
-straight to `litellm.acompletion(model=<string>)`:
+Archipelago does not gate model ids through an allow-list. Both call
+sites pass the model string straight to
+`litellm.acompletion(model=<string>)`, so `gpt-5.5`, `grok-4.3`, and
+`deepseek-v4-pro` route by prefix on the unmodified runner source:
 
 ```python
 # vendor/archipelago/agents/runner/utils/llm.py:134-164

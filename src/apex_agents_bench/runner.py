@@ -755,7 +755,7 @@ def run_single_task(
     code path — no DC-RS imports, no retrieval, no synthesizer. The
     returned ``dc_rs_csv_fragment`` is ``None`` in that case; callers
     must NOT add any DC-RS columns. This is the byte-identical baseline
-    preserved by ``test_dc_rs_off_csv_schema_unchanged``.
+    preserved by ``test_baseline_csv_has_no_dc_rs_columns``.
 
     When ``dc_rs_runtime`` is provided (DC-RS is on), two hooks fire,
     faithful to Suzgun et al.'s DC-RS:
@@ -1510,8 +1510,8 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             continue
 
         # Only write a row when the agent actually completed AND grading produced
-        # a usable score. Anything else is a skip (no row, like the vendor's
-        # ``status="completed"`` rule in apex-evals/run_with_hf.py).
+        # a usable score. Anything else is a skip (no row), matching the
+        # vendor's ``status="completed"`` rule.
         if outcome.agent_status != "completed":
             log.warning(
                 "task %s skipped: agent_status=%s (no CSV row written)",

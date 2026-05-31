@@ -5,12 +5,12 @@ agent caps, MCP server list, paths. CLI flags override; env vars do not (env
 is only for credentials).
 
 Project policies (these are NOT knobs):
-  - RUNS_PER_TASK = 1, always. Mirror of apex-bench. Every reported number in
-    this project uses one run per (task, model). Variance signal comes from
-    per-domain bins (n=160) and per-criterion granularity.
-  - JUDGE = gpt-5.5 at OpenAI's default medium reasoning effort. Same judge
-    as apex-bench keeps cross-benchmark numbers comparable. Deliberate diff
-    from Archipelago's example default (gemini/gemini-2.5-flash).
+  - RUNS_PER_TASK = 1, always. Every reported number in this project uses
+    one run per (task, model). Variance signal comes from per-domain bins
+    (n=160) and per-criterion granularity.
+  - JUDGE = gpt-5.5 at OpenAI's default medium reasoning effort. A single
+    fixed judge across evaluations. Deliberate diff from Archipelago's
+    example default (gemini/gemini-2.5-flash).
   - AGENT_MAX_STEPS = 50, AGENT_TIMEOUT_SECONDS = 3600. These match Mercor's
     published ``examples/hugging_face_task/agent_config.json`` exactly, NOT
     the agent registry's higher defaults (250 / 10800) which the published

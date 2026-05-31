@@ -6,8 +6,13 @@ PRDs and the README for details.
 
 ## Goal
 
-Compare three test-time-learning configurations on Mercor's APEX
-benchmarks at constant agent-side compute:
+The project asks whether a language-model agent can learn at test time,
+building a self-curated memory from its own past attempts and reusing it
+on later tasks. The central method is **DC-RS**, an adaptation of
+Suzgun et al.'s *Dynamic Cheatsheet* to the agentic setting; the harness
+evaluates it against a no-memory baseline on Mercor's APEX benchmarks at
+constant agent-side compute, and includes **TRACE** as a secondary
+memory mechanism for comparison.
 
 1. **Baseline** — vendor harness, no memory subsystem.
 2. **DC-RS** — Dynamic Cheatsheet — Retrieval Synthesis: a
@@ -16,31 +21,15 @@ benchmarks at constant agent-side compute:
    cheatsheet, adapted from Suzgun et al., *Dynamic Cheatsheet:
    Test-Time Learning with Adaptive Memory* (2025, arXiv:2504.07952).
    See [`DC_RS_PRD.md`](DC_RS_PRD.md).
-3. **TRACE** — reflector + curator with GT-bit feedback, atomic-bullet
-   cheatsheet adapted from Liao, Nair & Yang's *TRACE: Tool-augmented
-   Reasoning via Atomic Cheatsheet Editing* (Stanford CS224N final
-   project). See [`TRACE_PRD.md`](TRACE_PRD.md).
+3. **TRACE** — a secondary comparison: a reflector + curator with
+   GT-bit feedback over an atomic-bullet cheatsheet, *Tool-augmented
+   Reasoning via Atomic Cheatsheet Editing*. See
+   [`TRACE_PRD.md`](TRACE_PRD.md).
 
 For both subsystems the synthesizer (DC-RS) or the reflector + curator
 (TRACE) run on **the same model as the agent profile under test**. Only
 the **judge** model is fixed (gpt-5.5 medium). Embeddings always use
 OpenAI `text-embedding-3-large`.
-
-## Sister repositories
-
-The project ships two parallel harnesses, one per benchmark:
-
-| Repository                                           | Benchmark                  | Surface                                | Domains |
-|------------------------------------------------------|----------------------------|----------------------------------------|---------|
-| **apex-agents-bench** (this repo)                    | Mercor APEX-Agents         | Multi-turn ReAct toolbelt agent in a Dockerized environment (Archipelago) | Investment Banking, Law, Management Consulting |
-| **apex-bench** (sister)                              | Mercor APEX-v1-extended    | Single-shot prose deliverable          | Finance, Legal, Consulting, Medicine            |
-
-Both repositories implement the same three configurations (Baseline,
-DC-RS, TRACE) on top of their respective vendor harnesses. Where
-possible, structurally identical components (the cosine retriever, the
-per-domain pool + cheatsheet store, the trajectory rendering) are
-mirrored line-for-line so cross-benchmark results are genuinely
-comparable.
 
 ## What's in this repo
 
@@ -50,9 +39,9 @@ comparable.
 - `docs/TRACE_PRD.md` — the TRACE specification.
 - `tests/` — unit + fidelity tests; the baseline schema is byte-
   identical when neither subsystem is enabled.
-- `vendor/archipelago/` — pristine vendored Archipelago at the pinned
-  commit (3f4a8234); the only patches live in upstream-tracked vendor
-  patch commits.
+- `vendor/archipelago/` — vendored Archipelago at the pinned commit
+  (3f4a8234) with one build-time patch (the `environment/Dockerfile`
+  `sandbox_fs.so` compile, Patch 001); see `vendor/archipelago/PATCHES.md`.
 
 ## CLI surface, at a glance
 
@@ -69,7 +58,8 @@ reflector/curator) through Azure-OpenAI; embeddings always use OpenAI.
 ## Reading the results
 
 The baseline CSV columns are pinned by the
-`test_dc_rs_off_csv_schema_unchanged` fidelity test. The two memory
+`test_baseline_csv_has_no_dc_rs_columns` fidelity test. The two memory
 subsystems each append a known set of columns when enabled.
-The README's *Results* table summarises Pass@1 (final_score == 100,
-i.e. all rubric items scored) and mean score across configurations.
+The README's *Results* table reports, per domain, the mean rubric score
+for the baseline and DC-RS and the per-task win/tie/loss of DC-RS against
+the baseline.

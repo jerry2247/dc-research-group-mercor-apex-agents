@@ -218,12 +218,11 @@ def test_no_profile_sets_max_tokens() -> None:
         assert "max_input_tokens" not in p.orchestrator_extra_args, p.name
 
 
-def test_gpt55_profiles_match_apex_bench_shape() -> None:
+def test_gpt55_profiles_expected_shape() -> None:
     """gpt-5.5-* profiles: reasoning_effort + verbosity=medium, no temperature.
 
-    Unlike apex-bench's single-shot harness, Archipelago has no ModelConfig
-    default temperature to neutralize; omitting temperature sends no custom
-    temperature to LiteLLM/OpenAI.
+    Archipelago has no ModelConfig default temperature to neutralize;
+    omitting temperature sends no custom temperature to LiteLLM/OpenAI.
     """
     for p in (pp for pp in all_profiles() if pp.family == "gpt-5.5"):
         ea = p.orchestrator_extra_args
@@ -233,7 +232,7 @@ def test_gpt55_profiles_match_apex_bench_shape() -> None:
         assert p.orchestrator_model == "openai/gpt-5.5", p.name
 
 
-def test_grok43_profiles_match_apex_bench_shape() -> None:
+def test_grok43_profiles_expected_shape() -> None:
     """grok-4.3-* profiles: reasoning_effort + temperature=0.8."""
     for p in (pp for pp in all_profiles() if pp.family == "grok-4.3"):
         ea = p.orchestrator_extra_args
@@ -265,7 +264,7 @@ def test_deepseek_v4_pro_profile_matches_docs_shape() -> None:
 
 
 def test_no_claude_profile_registered() -> None:
-    """Claude/Bedrock is deferred in lockstep with apex-bench."""
+    """Claude/Bedrock is deferred."""
     for p in all_profiles():
         assert p.provider != "anthropic-bedrock", (
             f"Claude profile {p.name!r} should be deferred -- see agent_profile.py "

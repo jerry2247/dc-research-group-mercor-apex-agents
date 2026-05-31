@@ -5,9 +5,8 @@ runs on the same model as the active AgentProfile under test; only the
 judge model is fixed (gpt-5.5 medium). No ground-truth bit is threaded
 into the synthesizer — DC-RS does not consume grading outcomes.
 
-This is the agentic port of the sibling apex-bench ``DCRSConfig``; it
-adds ``trajectory_max_chars_per_tool_result`` to bound how much of each
-tool result is rendered into the past-case transcripts.
+The config adds ``trajectory_max_chars_per_tool_result`` to bound how
+much of each tool result is rendered into the past-case transcripts.
 """
 
 from __future__ import annotations

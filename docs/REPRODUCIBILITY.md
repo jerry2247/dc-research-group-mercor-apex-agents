@@ -8,9 +8,8 @@
 
 ### 1. One run per (task, model). Always.
 
-Same policy as apex-bench. The standard APEX-Agents leaderboard reports
-pass@1 (one run) and sometimes pass@8 (eight runs). We use pass@1 for
-every reported number.
+The standard APEX-Agents leaderboard reports pass@1 (one run) and
+sometimes pass@8 (eight runs). We use pass@1 for every reported number.
 
 **Why one run, not eight?** Eight runs multiplies our cost-per-cell by
 8x. Across 8 agent profiles × 480 tasks, eight runs would be ~$1k/cell.
@@ -32,9 +31,6 @@ leaderboard uses Gemini 2.5 Pro Thinking=On. **We use GPT-5.5 instead.**
 
 **Why GPT-5.5?**
 
-- *Cross-benchmark consistency*: apex-bench (our sister repo, for
-  APEX-v1-extended) also uses `gpt-5.5` as judge. Same judge across
-  both benchmarks makes the same agent's scores directly comparable.
 - *Cost*: GPT-5.5 medium is cheaper per judgment than Gemini 2.5 Pro
   Thinking.
 - *Reasoning ability*: medium-effort GPT-5.5 is closer to Gemini Pro
@@ -82,12 +78,10 @@ runner refuses a hand-edited MCP config that subsets at run time.
 
 ### 5. Minimal vendor source modifications (one build patch).
 
-Archipelago's LiteLLM call sites pass model names verbatim (unlike
-apex-evals, which had a `MODEL_MAPPINGS` allow-list), so the GPT-5.5 /
-Grok 4.3 / DeepSeek surface needs **no** source patch. The one vendored
-change is
-a build-time patch to `environment/Dockerfile` that compiles
-`sandbox_fs.so` for the code-execution server (Patch 001 in
+Archipelago's LiteLLM call sites pass model names verbatim, so the
+GPT-5.5 / Grok 4.3 / DeepSeek surface needs **no** source patch. The one
+vendored change is a build-time patch to `environment/Dockerfile` that
+compiles `sandbox_fs.so` for the code-execution server (Patch 001 in
 `PATCHES.md`); there are zero patches to the Python runners.
 
 **Enforced at**: `vendor/archipelago/PATCHES.md`, asserted in

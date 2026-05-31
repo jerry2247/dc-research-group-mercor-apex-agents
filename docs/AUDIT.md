@@ -8,7 +8,7 @@
 > with code-level evidence and regression tests for every claim. If
 > `make check` is green, every claim in this document still holds.
 
-**Last reviewed: 2026-05-19 against upstream commit `3f4a8234a27d71a17e0aa19e60f116440bcd1481`.**
+**Last reviewed: 2026-05-30 against upstream commit `3f4a8234a27d71a17e0aa19e60f116440bcd1481`.**
 
 This document records every check that confirms our wrapper does not
 change what reaches the agent or the judge relative to Mercor's
@@ -224,8 +224,8 @@ OpenAI-compatible request body.
 - `tests/test_fidelity.py::test_no_profile_uses_disallowed_extra_args`
 - `tests/test_fidelity.py::test_no_profile_sets_top_p`
 - `tests/test_fidelity.py::test_no_profile_sets_max_tokens`
-- `tests/test_fidelity.py::test_gpt55_profiles_match_apex_bench_shape`
-- `tests/test_fidelity.py::test_grok43_profiles_match_apex_bench_shape`
+- `tests/test_fidelity.py::test_gpt55_profiles_expected_shape`
+- `tests/test_fidelity.py::test_grok43_profiles_expected_shape`
 - `tests/test_fidelity.py::test_deepseek_v4_pro_profile_matches_docs_shape`
 
 ---
@@ -257,9 +257,8 @@ the CSV, and records whether usage was present and internally consistent.
 
 ## A11. Claude/Bedrock deferred
 
-**Claim**: No Claude profiles are registered. This mirrors apex-bench's
-deferral. Bedrock plumbing is structurally absent from the apex-evals
-sister harness; we wait until both repos can enable Claude jointly.
+**Claim**: No Claude profiles are registered; Claude-on-Bedrock support
+is deferred (see `docs/IMPLEMENTATION_PLAN.md`).
 
 **Tests**:
 - `tests/test_fidelity.py::test_no_claude_profile_registered`
@@ -293,11 +292,11 @@ not fidelity bugs; they are scope choices.
 
 | Aspect | Mercor's example | Ours | Reason |
 |---|---|---|---|
-| Judge model | `gemini/gemini-2.5-flash` (open example); Gemini 2.5 Pro Thinking=On (leaderboard) | `openai/gpt-5.5` (medium-by-default) | Cross-benchmark consistency with apex-bench; see REPRODUCIBILITY.md. |
+| Judge model | `gemini/gemini-2.5-flash` (open example); Gemini 2.5 Pro Thinking=On (leaderboard) | `openai/gpt-5.5` (medium-by-default) | A single fixed judge across our evaluations; see REPRODUCIBILITY.md. |
 | Agent model | `gemini/gemini-3-pro-preview` (open example) | profile-driven (`gpt-5.5-*`, `grok-4.3-*`, `deepseek-v4-pro-max`) | We compare DC variants against a fixed agent surface. |
 | Number of runs per task | 1 | 1 | Same. |
-| Test models | one example task | profile registry (8 profiles), one profile per invocation | Parity with apex-bench plus one DeepSeek V4 Pro max-effort profile. |
-| Claude/Bedrock | (would route via direct Anthropic API) | deferred | Joint deferral with apex-bench. |
+| Test models | one example task | profile registry (8 profiles), one profile per invocation | A fixed agent surface for comparing memory methods (gpt-5.5-*, grok-4.3-*, deepseek-v4-pro-max). |
+| Claude/Bedrock | (would route via direct Anthropic API) | deferred | Bedrock plumbing deferred; see IMPLEMENTATION_PLAN.md. |
 | Resume | none | per-CSV `status="completed"` resume | Operational ergonomics; does not change per-task behavior. |
 
 Every other behavioral knob — agent type, step cap, timeout, MCP

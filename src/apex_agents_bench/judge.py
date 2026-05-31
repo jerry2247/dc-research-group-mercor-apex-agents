@@ -13,7 +13,7 @@ from the agent runner's ``--output``.
 
 Our only deliberate divergence from Mercor's published example is the
 ``llm_judge_model`` -- they ship ``gemini/gemini-2.5-flash``; we ship
-``openai/gpt-5.5`` for cross-benchmark consistency with apex-bench.
+``openai/gpt-5.5`` as our single fixed judge.
 """
 
 from __future__ import annotations
