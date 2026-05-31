@@ -76,6 +76,35 @@ Behavioral fidelity to Mercor's published evaluation surface is enforced by pyte
 
 Code: see [`LICENSE`](LICENSE). Mercor's vendored harness and benchmark dataset are governed by their respective upstream licenses.
 
+## Running on Azure OpenAI
+
+By default every gpt-5.5 call (the agent profile, the judge, and the DC-RS/TRACE
+synthesizers) is served by OpenAI. Pass `--azure` to route the gpt-5.5 calls to
+an Azure AI Foundry OpenAI-compatible `/openai/v1` deployment instead. Other
+models (grok, deepseek) are unaffected, and embeddings always use
+`OPENAI_API_KEY`.
+
+Set these in `.env` before running with `--azure`:
+
+```
+AZURE_API_KEY=<key from your Azure AI Foundry resource>
+AZURE_API_BASE=https://<your-resource>.services.ai.azure.com/openai/v1
+AZURE_GPT55_DEPLOYMENT_NAME=<exact deployment name>   # default: gpt-5.5
+AZURE_API_VERSION=2025-07-01-preview        # optional; kept for reference, not used by this /openai/v1 route
+```
+
+The agent and judge share one deployment: the agent runs at its profile's
+reasoning effort (e.g. `gpt-5.5-xhigh`) and the judge is pinned to medium.
+The runner injects the Azure key/base only into the agent and grading
+subprocesses, and passes the same key/base directly to the in-process DC-RS or
+TRACE synthesis calls. The parent process keeps `OPENAI_API_KEY` for embeddings.
+Example:
+
+```
+apex-agents-bench run --azure --model gpt-5.5-xhigh \
+  --world <world_id> --output runs/gpt55xhigh-baseline/results.csv
+```
+
 ## Citation
 
 ```bibtex

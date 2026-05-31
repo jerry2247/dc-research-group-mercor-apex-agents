@@ -15,11 +15,7 @@ import re
 from pathlib import Path
 
 _PROMPTS_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "src"
-    / "apex_agents_bench"
-    / "dc_rs"
-    / "prompts"
+    Path(__file__).resolve().parent.parent / "src" / "apex_agents_bench" / "dc_rs" / "prompts"
 )
 
 
@@ -50,8 +46,8 @@ def test_dc_rs_on_csv_extends_baseline_at_end() -> None:
     """The DC-RS-on header list is exactly the baseline ``CSV_HEADERS``
     followed by the DC-RS columns — the baseline prefix is preserved."""
     from apex_agents_bench.runner import (
-        CSV_HEADERS,
         _DC_RS_CSV_COLUMNS,
+        CSV_HEADERS,
         csv_headers_with_dc_rs,
     )
 
@@ -59,13 +55,13 @@ def test_dc_rs_on_csv_extends_baseline_at_end() -> None:
     assert on == list(CSV_HEADERS) + list(_DC_RS_CSV_COLUMNS)
     # Equivalent prefix/suffix split (matches the prose fidelity check).
     assert on[: len(CSV_HEADERS)] == list(CSV_HEADERS)
-    assert tuple(on[len(CSV_HEADERS):]) == _DC_RS_CSV_COLUMNS
+    assert tuple(on[len(CSV_HEADERS) :]) == _DC_RS_CSV_COLUMNS
 
 
 def test_baseline_csv_has_no_dc_rs_columns() -> None:
     """Off-state is unchanged: none of the DC-RS-specific columns may
     leak into the baseline header tuple."""
-    from apex_agents_bench.runner import CSV_HEADERS, _DC_RS_CSV_COLUMNS
+    from apex_agents_bench.runner import _DC_RS_CSV_COLUMNS, CSV_HEADERS
 
     assert not (set(_DC_RS_CSV_COLUMNS) & set(CSV_HEADERS))
 

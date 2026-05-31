@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from apex_agents_bench.trace.bullet import TraceLedger
 from apex_agents_bench.trace.citations import (
     extract_and_strip_citations_from_trajectory,
@@ -17,13 +15,19 @@ from apex_agents_bench.trace.injector import augment_initial_messages, render_bu
 def _two_bullets() -> list:
     s = TraceLedger(domain="Law")
     s.add(
-        section="A", content="alpha", source_problem="ap",
-        content_embedding=[1.0], source_problem_embedding=[0.0],
+        section="A",
+        content="alpha",
+        source_problem="ap",
+        content_embedding=[1.0],
+        source_problem_embedding=[0.0],
         created=1,
     )
     s.add(
-        section="B", content="beta", source_problem="bp",
-        content_embedding=[0.0], source_problem_embedding=[1.0],
+        section="B",
+        content="beta",
+        source_problem="bp",
+        content_embedding=[0.0],
+        source_problem_embedding=[1.0],
         created=2,
     )
     return list(s.bullets.values())
@@ -88,9 +92,7 @@ def test_extract_citations_from_trajectory(tmp_path: Path) -> None:
     assert extract.citations_present
     assert extract.cited_bullet_ids == ["bullet-1", "bullet-7"]
     assert shadow is not None
-    shadow_args = json.loads(
-        shadow["messages"][0]["tool_calls"][0]["function"]["arguments"]
-    )
+    shadow_args = json.loads(shadow["messages"][0]["tool_calls"][0]["function"]["arguments"])
     assert "<citations>" not in shadow_args["reasoning"]
 
 
@@ -103,7 +105,9 @@ def test_extract_citations_returns_none_when_absent(tmp_path: Path) -> None:
                     {
                         "function": {
                             "name": "final_answer",
-                            "arguments": json.dumps({"answer": "x", "reasoning": "no tag", "status": "completed"}),
+                            "arguments": json.dumps(
+                                {"answer": "x", "reasoning": "no tag", "status": "completed"}
+                            ),
                         }
                     }
                 ],

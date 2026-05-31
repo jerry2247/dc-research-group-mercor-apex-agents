@@ -50,8 +50,11 @@ def test_add_and_active() -> None:
 def test_record_citation_bumps_counters() -> None:
     s = TraceLedger(domain="Investment Banking")
     b = s.add(
-        section="x", content="c", source_problem="p",
-        content_embedding=[1.0, 0.0], source_problem_embedding=[0.0, 1.0],
+        section="x",
+        content="c",
+        source_problem="p",
+        content_embedding=[1.0, 0.0],
+        source_problem_embedding=[0.0, 1.0],
         created=1,
     )
     assert s.record_citation(b.bullet_id, gt_correct=True) is True
@@ -75,8 +78,11 @@ def test_record_citation_skips_unknown() -> None:
 def test_serialize_for_llm_includes_counters_omits_embeddings() -> None:
     s = TraceLedger(domain="Law")
     b = s.add(
-        section="x", content="c", source_problem="p",
-        content_embedding=[1.0, 0.0], source_problem_embedding=[0.0, 1.0],
+        section="x",
+        content="c",
+        source_problem="p",
+        content_embedding=[1.0, 0.0],
+        source_problem_embedding=[0.0, 1.0],
         created=1,
     )
     s.record_citation(b.bullet_id, gt_correct=True)
@@ -99,8 +105,11 @@ def test_serialize_for_llm_includes_counters_omits_embeddings() -> None:
 def test_soft_delete_excludes_from_active() -> None:
     s = TraceLedger(domain="Law")
     s.add(
-        section="x", content="c", source_problem="p",
-        content_embedding=[1.0], source_problem_embedding=[0.0],
+        section="x",
+        content="c",
+        source_problem="p",
+        content_embedding=[1.0],
+        source_problem_embedding=[0.0],
         created=1,
     )
     s.soft_delete("bullet-1", updated=2)

@@ -47,7 +47,9 @@ class SnapshotStore:
         if not idxs:
             return None
         idx = max(idxs)
-        return idx, TraceLedger.model_validate_json(self.snapshot_path(idx).read_text(encoding="utf-8"))
+        return idx, TraceLedger.model_validate_json(
+            self.snapshot_path(idx).read_text(encoding="utf-8")
+        )
 
     def load_for_resume(self, *, domain: str) -> tuple[int, TraceLedger]:
         """Load the highest snapshot on disk for this domain.
@@ -66,9 +68,7 @@ class SnapshotStore:
         if not candidates:
             return 0, TraceLedger(domain=domain)
         idx = max(candidates)
-        store = TraceLedger.model_validate_json(
-            self.snapshot_path(idx).read_text(encoding="utf-8")
-        )
+        store = TraceLedger.model_validate_json(self.snapshot_path(idx).read_text(encoding="utf-8"))
         return idx, store
 
     def append_curator_log(self, record: dict) -> None:

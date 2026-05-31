@@ -49,7 +49,7 @@ def parse_bullet_id(bullet_id: str) -> int:
     if not bullet_id.startswith("bullet-") or len(bullet_id) <= len("bullet-"):
         raise ValueError(f"malformed bullet_id: {bullet_id!r}")
     try:
-        return int(bullet_id[len("bullet-"):])
+        return int(bullet_id[len("bullet-") :])
     except ValueError as exc:
         raise ValueError(f"malformed bullet_id: {bullet_id!r}") from exc
 

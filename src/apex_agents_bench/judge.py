@@ -49,8 +49,9 @@ def build_grading_settings(judge: JudgeConfig) -> dict[str, Any]:
         llm_judge_model       -- LiteLLM-routable model name
         llm_judge_extra_args  -- dict | None, splatted into litellm.acompletion
 
-    We use ``None`` (or an empty dict) for extra_args by default so OpenAI's
-    medium reasoning effort applies to gpt-5.5.
+    By default the judge pins ``reasoning_effort=medium`` (see ``JudgeConfig``
+    in config.py), so this dict is non-empty and medium effort applies
+    identically whether the judge routes to OpenAI or Azure.
     """
     payload: dict[str, Any] = {
         "llm_judge_model": judge.model_id,

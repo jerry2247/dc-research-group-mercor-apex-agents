@@ -45,6 +45,7 @@ def render_trajectory_for_curator(
                     pass
                 else:
                     import json as _j
+
                     args = _j.dumps(args)
                 out.append(f"tool_call {name}: {args}")
         elif role == "tool":

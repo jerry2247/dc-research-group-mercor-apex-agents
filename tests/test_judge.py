@@ -40,7 +40,9 @@ def _make_task(criteria: list[tuple[str, str]]) -> Task:
 def test_grading_settings_default_is_gpt55() -> None:
     s = build_grading_settings(JudgeConfig())
     assert s["llm_judge_model"] == "openai/gpt-5.5"
-    assert s["llm_judge_extra_args"] in (None, {})
+    # The judge pins reasoning_effort=medium explicitly (see JudgeConfig) so it
+    # runs at medium identically on OpenAI and Azure, not at the provider default.
+    assert s["llm_judge_extra_args"] == {"reasoning_effort": "medium"}
 
 
 def test_grading_settings_passes_through_extra_args() -> None:

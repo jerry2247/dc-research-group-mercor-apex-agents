@@ -8,9 +8,9 @@ Project policies (these are NOT knobs):
   - RUNS_PER_TASK = 1, always. Every reported number in this project uses
     one run per (task, model). Variance signal comes from per-domain bins
     (n=160) and per-criterion granularity.
-  - JUDGE = gpt-5.5 at OpenAI's default medium reasoning effort. A single
-    fixed judge across evaluations. Deliberate diff from Archipelago's
-    example default (gemini/gemini-2.5-flash).
+  - JUDGE = gpt-5.5 at medium reasoning effort, pinned explicitly (not left
+    to the provider default). A single fixed judge across evaluations.
+    Deliberate diff from Archipelago's example default (gemini/gemini-2.5-flash).
   - AGENT_MAX_STEPS = 50, AGENT_TIMEOUT_SECONDS = 3600. These match Mercor's
     published ``examples/hugging_face_task/agent_config.json`` exactly, NOT
     the agent registry's higher defaults (250 / 10800) which the published
@@ -33,13 +33,21 @@ from apex_agents_bench.paths import (
 # --- Policy defaults (do not change casually) --------------------------------
 
 DEFAULT_JUDGE_MODEL = "openai/gpt-5.5"
-"""GPT-5.5 routed through LiteLLM's openai/ prefix. No reasoning_effort
-override => OpenAI's default of ``medium`` applies. This is the project judge
-across every run; only the agent model varies.
+"""GPT-5.5 routed through LiteLLM's openai/ prefix. ``reasoning_effort`` is
+pinned to ``medium`` explicitly via ``DEFAULT_JUDGE_REASONING_EFFORT`` rather
+than relying on the provider default. This is the project judge across every
+run; only the agent model varies.
 
 Note the leading ``openai/`` -- Archipelago's grading runner passes this
 string verbatim to ``litellm.acompletion(model=...)``, and the example uses
 the same provider-prefix form (``gemini/gemini-2.5-flash``)."""
+
+DEFAULT_JUDGE_REASONING_EFFORT = "medium"
+"""Pinned into the judge's LiteLLM call instead of relying on the provider
+default. OpenAI's gpt-5.5 defaults to medium, but Azure-OpenAI's gpt-5 family
+does not uniformly default to medium (e.g. gpt-5.1 defaults to ``none``), so an
+unset effort would silently change the judge when routed through Azure
+(``--azure``). Pinning keeps "gpt-5.5-medium" identical on OpenAI and Azure."""
 
 DEFAULT_JUDGE_TIMEOUT_SECONDS = 600
 """LiteLLM request timeout for a single judge call. Matches the vendor's
@@ -95,13 +103,17 @@ class JudgeConfig:
 
     ``model_id`` is the LiteLLM-routable name (e.g. ``openai/gpt-5.5``).
     ``extra_args`` is passed verbatim into LiteLLM ``acompletion`` by the
-    vendor's grading runner; we leave it empty by default so OpenAI's default
-    ``reasoning_effort=medium`` applies.
+    vendor's grading runner; by default it pins
+    ``reasoning_effort=medium`` so the judge runs at medium effort
+    identically whether routed to OpenAI or Azure (see
+    ``DEFAULT_JUDGE_REASONING_EFFORT``).
     """
 
     model_id: str = DEFAULT_JUDGE_MODEL
     timeout_seconds: int = DEFAULT_JUDGE_TIMEOUT_SECONDS
-    extra_args: dict[str, object] = field(default_factory=dict)
+    extra_args: dict[str, object] = field(
+        default_factory=lambda: {"reasoning_effort": DEFAULT_JUDGE_REASONING_EFFORT}
+    )
 
 
 @dataclass(frozen=True)

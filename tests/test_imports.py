@@ -45,8 +45,8 @@ def test_settings_defaults_match_policy() -> None:
     s = Settings.defaults()
     assert s.judge.model_id == DEFAULT_JUDGE_MODEL
     assert s.judge.model_id == "openai/gpt-5.5", (
-        "Project policy: judge is gpt-5.5 at OpenAI's default reasoning_effort "
-        "(medium), routed via LiteLLM's openai/ prefix."
+        "Project policy: judge is gpt-5.5 at a pinned reasoning_effort of "
+        "medium, routed via LiteLLM's openai/ prefix."
     )
     assert s.agent.max_steps == AGENT_MAX_STEPS == 50, (
         "Project policy: max_steps=50, matching Mercor's published example."

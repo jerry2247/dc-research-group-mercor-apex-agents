@@ -593,12 +593,13 @@ def run(
         False,
         "--azure/--no-azure",
         help="Route GPT-5.5 chat completions (judge + agent profile + DC-RS "
-        "synthesizer + TRACE reflector/curator) through Azure-OpenAI instead "
-        "of OpenAI. Requires AZURE_API_KEY, AZURE_API_BASE, and "
-        "AZURE_API_VERSION env vars; the Azure deployment name comes from "
-        "AZURE_GPT55_DEPLOYMENT_NAME (default `gpt-5.5`). The embedding "
-        "model (text-embedding-3-large) is always served by OpenAI "
-        "regardless of this flag.",
+        "synthesizer + TRACE reflector/curator) through an Azure AI Foundry "
+        "OpenAI-compatible /openai/v1 endpoint instead of OpenAI. Requires "
+        "AZURE_API_KEY and AZURE_API_BASE; AZURE_API_VERSION is optional and "
+        "not used by this /openai/v1 route. The Azure deployment name comes "
+        "from AZURE_GPT55_DEPLOYMENT_NAME (default `gpt-5.5`). The embedding "
+        "model (text-embedding-3-large) is always served by OpenAI regardless "
+        "of this flag.",
     ),
 ) -> None:
     """Run APEX-Agents on a slice of tasks. ONE run per (task, model), always.
@@ -616,9 +617,7 @@ def run(
     from apex_agents_bench.trace.config import TraceConfig
 
     if dc_rs and trace:
-        console.print(
-            "[red]error:[/red] --dc-rs and --trace are mutually exclusive; pick one."
-        )
+        console.print("[red]error:[/red] --dc-rs and --trace are mutually exclusive; pick one.")
         raise typer.Exit(code=2)
 
     _validate_domain(domain)

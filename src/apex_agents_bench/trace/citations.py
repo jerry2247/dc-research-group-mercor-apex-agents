@@ -22,9 +22,7 @@ _CITATIONS_RE = re.compile(
     r"<citations>\s*\[\s*((?:bullet-\d+(?:\s*,\s*bullet-\d+)*)?)\s*\]\s*</citations>",
     re.IGNORECASE,
 )
-_LOOSE_CITATIONS_RE = re.compile(
-    r"<citations\b[^>]*>(.*?)</citations>", re.IGNORECASE | re.DOTALL
-)
+_LOOSE_CITATIONS_RE = re.compile(r"<citations\b[^>]*>(.*?)</citations>", re.IGNORECASE | re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -58,7 +56,7 @@ def _extract_from_reasoning(reasoning: str) -> CitationExtract:
             if t and re.fullmatch(r"bullet-\d+", t):
                 ids.append(t)
 
-    stripped = (reasoning[: last.start()].rstrip() + reasoning[last.end():]).strip()
+    stripped = (reasoning[: last.start()].rstrip() + reasoning[last.end() :]).strip()
     return CitationExtract(
         cited_bullet_ids=ids,
         citations_present=True,
@@ -87,7 +85,7 @@ def extract_and_strip_citations_from_trajectory(
             continue
         tcs = m.get("tool_calls") or []
         for j, tc in enumerate(tcs):
-            fn = (tc.get("function") or {})
+            fn = tc.get("function") or {}
             if fn.get("name") == "final_answer":
                 fa_idx = len(msgs) - 1 - i
                 fa_call_idx = j
@@ -97,7 +95,9 @@ def extract_and_strip_citations_from_trajectory(
     if fa_idx is None or fa_call_idx is None:
         return CitationExtract([], False, 0, None), None
 
-    raw_args = (msgs[fa_idx].get("tool_calls") or [])[fa_call_idx].get("function", {}).get("arguments", "")
+    raw_args = (
+        (msgs[fa_idx].get("tool_calls") or [])[fa_call_idx].get("function", {}).get("arguments", "")
+    )
     if isinstance(raw_args, str):
         try:
             args = json.loads(raw_args)
@@ -118,7 +118,9 @@ def extract_and_strip_citations_from_trajectory(
         shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"].get("arguments") or "{}"
     )
     shadow_args["reasoning"] = extract.stripped_reasoning or ""
-    shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"]["arguments"] = json.dumps(shadow_args)
+    shadow_msgs[fa_idx]["tool_calls"][fa_call_idx]["function"]["arguments"] = json.dumps(
+        shadow_args
+    )
     return extract, shadow
 
 

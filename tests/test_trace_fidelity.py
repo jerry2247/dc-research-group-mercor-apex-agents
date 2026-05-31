@@ -54,14 +54,14 @@ def test_trace_off_csv_schema_baseline_is_unchanged() -> None:
 
 def test_trace_on_csv_extends_baseline_at_end() -> None:
     from apex_agents_bench.runner import (
-        CSV_HEADERS,
         _TRACE_CSV_COLUMNS,
+        CSV_HEADERS,
         csv_headers_with_trace,
     )
 
     on = csv_headers_with_trace()
     assert on[: len(CSV_HEADERS)] == CSV_HEADERS
-    assert tuple(on[len(CSV_HEADERS):]) == _TRACE_CSV_COLUMNS
+    assert tuple(on[len(CSV_HEADERS) :]) == _TRACE_CSV_COLUMNS
 
 
 def test_trace_config_default_is_off() -> None:

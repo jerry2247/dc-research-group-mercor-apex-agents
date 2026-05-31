@@ -45,17 +45,25 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 from apex_agents_bench import __version__
 from apex_agents_bench.agent_profile import AgentProfile
+from apex_agents_bench.azure_routing import (
+    AzureConfig,
+    azure_call_kwargs,
+    azure_subprocess_env,
+    route_model_id,
+)
 from apex_agents_bench.config import (
     AGENT_CONFIG_ID,
     MCP_SERVERS,
     Settings,
 )
 from apex_agents_bench.dataset import Task, load_tasks, validate
+from apex_agents_bench.dc_rs.config import DCRSConfig
 from apex_agents_bench.docker_env import EnvContainer, start_env, stop_env
 from apex_agents_bench.judge import (
     write_eval_configs,
@@ -63,9 +71,6 @@ from apex_agents_bench.judge import (
     write_scoring_config,
     write_verifiers,
 )
-from apex_agents_bench.azure_routing import AzureConfig, route_model_id
-from apex_agents_bench.dc_rs.config import DCRSConfig
-from apex_agents_bench.trace.config import TraceConfig
 from apex_agents_bench.paths import (
     archipelago_agents_dir,
     archipelago_environment_dir,
@@ -73,6 +78,7 @@ from apex_agents_bench.paths import (
     repo_root,
     vendor_dir,
 )
+from apex_agents_bench.trace.config import TraceConfig
 from apex_agents_bench.trajectory import (
     GradingSummary,
     TrajectoryError,
@@ -438,11 +444,8 @@ def _needs_hf_token(settings: Settings, selected: list[Task]) -> bool:
     return False
 
 
-def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str | None) -> None:
-    """Fail before Docker/HF/model calls if required credentials are obviously missing."""
-    if not selected:
-        return
-
+def _load_dotenv_for_run() -> None:
+    """Load the repo .env once before any env-derived run configuration is built."""
     try:
         from dotenv import load_dotenv
 
@@ -450,22 +453,48 @@ def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str
     except Exception:
         pass
 
+
+def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str | None) -> None:
+    """Fail before Docker/HF/model calls if required credentials are obviously missing."""
+    if not selected:
+        return
+
+    _load_dotenv_for_run()
+
     missing: list[str] = []
-    # Apply Azure routing BEFORE the credential check so we look for the
-    # right env var (AZURE_API_KEY) when the routed model id is azure/...
-    routed_agent = route_model_id(opts.profile.orchestrator_model, cfg=opts.azure)
-    routed_judge = route_model_id(opts.settings.judge.model_id, cfg=opts.azure)
-    agent_key = _required_api_key(
-        routed_agent,
-        "azure" if routed_agent.startswith("azure/") else opts.profile.provider,
-    )
-    judge_key = _required_api_key(routed_judge)
-    for key in (agent_key, judge_key):
-        if key and not os.environ.get(key) and key not in missing:
-            missing.append(key)
-    # Embeddings always go through OpenAI, even with Azure routing on
-    if (opts.dc_rs.enabled or opts.trace.enabled) and not os.environ.get("OPENAI_API_KEY"):
-        if "OPENAI_API_KEY" not in missing:
+    if opts.azure.enabled:
+        # All gpt-5.5 calls (agent if it is gpt-5.5, judge, and the in-process
+        # DC-RS synthesizer / TRACE reflector+curator) route to the Azure
+        # deployment via the openai/ provider with AZURE creds. Require both the
+        # key and the OpenAI-compatible base.
+        for key in ("AZURE_API_KEY", "AZURE_API_BASE"):
+            if not os.environ.get(key) and key not in missing:
+                missing.append(key)
+        # If the agent model is NOT gpt-5.5 (e.g. grok), Azure does not touch it;
+        # it still needs its own provider key.
+        if opts.profile.family != "gpt-5.5":
+            agent_key = _required_api_key(opts.profile.orchestrator_model, opts.profile.provider)
+            if agent_key and not os.environ.get(agent_key) and agent_key not in missing:
+                missing.append(agent_key)
+        # Embeddings (DC-RS / TRACE) always use the real OpenAI key, never Azure.
+        if (
+            (opts.dc_rs.enabled or opts.trace.enabled)
+            and not os.environ.get("OPENAI_API_KEY")
+            and "OPENAI_API_KEY" not in missing
+        ):
+            missing.append("OPENAI_API_KEY")
+    else:
+        agent_key = _required_api_key(opts.profile.orchestrator_model, opts.profile.provider)
+        judge_key = _required_api_key(opts.settings.judge.model_id)
+        for key in (agent_key, judge_key):
+            if key and not os.environ.get(key) and key not in missing:
+                missing.append(key)
+        # Embeddings always go through OpenAI.
+        if (
+            (opts.dc_rs.enabled or opts.trace.enabled)
+            and not os.environ.get("OPENAI_API_KEY")
+            and "OPENAI_API_KEY" not in missing
+        ):
             missing.append("OPENAI_API_KEY")
     if _needs_hf_token(opts.settings, selected) and not (hf_token or os.environ.get("HF_TOKEN")):
         missing.append("HF_TOKEN")
@@ -492,6 +521,8 @@ def build_run_manifest(
     tasks_path = opts.settings.dataset_dir / "tasks_and_rubrics.json"
     worlds_path = opts.settings.dataset_dir / "world_descriptions.json"
     mcp_config_path = opts.settings.mcp_config_path
+    azure_base = os.environ.get("AZURE_API_BASE") or ""
+    parsed_azure_base = urlparse(azure_base) if azure_base else None
     return {
         "schema_version": 1,
         "status": status,
@@ -537,6 +568,35 @@ def build_run_manifest(
             "model_id": opts.settings.judge.model_id,
             "timeout_seconds": opts.settings.judge.timeout_seconds,
             "extra_args": dict(opts.settings.judge.extra_args),
+        },
+        "azure": {
+            "enabled": opts.azure.enabled,
+            "route": "openai-compatible-/openai/v1" if opts.azure.enabled else None,
+            "deployment_name": opts.azure.resolved_deployment_name()
+            if opts.azure.enabled
+            else None,
+            "api_base_present": bool(azure_base) if opts.azure.enabled else False,
+            "api_base_scheme": parsed_azure_base.scheme
+            if opts.azure.enabled and parsed_azure_base
+            else None,
+            "api_base_host": parsed_azure_base.netloc
+            if opts.azure.enabled and parsed_azure_base
+            else None,
+            "api_base_path": parsed_azure_base.path
+            if opts.azure.enabled and parsed_azure_base
+            else None,
+            "api_key_present": bool(os.environ.get("AZURE_API_KEY"))
+            if opts.azure.enabled
+            else False,
+            "api_version_present": bool(os.environ.get("AZURE_API_VERSION"))
+            if opts.azure.enabled
+            else False,
+            "api_version_used_by_route": False if opts.azure.enabled else None,
+            "effective_agent_model": route_model_id(
+                opts.profile.orchestrator_model, cfg=opts.azure
+            ),
+            "effective_judge_model": route_model_id(opts.settings.judge.model_id, cfg=opts.azure),
+            "embeddings_provider": "openai",
         },
         "run_policy": {
             "runs_per_task": 1,
@@ -628,8 +688,14 @@ def _run_agent_subprocess(
     orchestrator_model: str,
     orchestrator_extra_args_path: Path,
     trajectory_out: Path,
+    extra_env: dict[str, str] | None = None,
 ) -> int:
-    """Invoke the vendored agent runner via uv (matches the upstream example)."""
+    """Invoke the vendored agent runner via uv (matches the upstream example).
+
+    ``extra_env`` is merged into the child process environment only (e.g. the
+    Azure ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` overrides when ``--azure`` is
+    on). It is never written to disk; the orchestrator model string and
+    extra-args file are unchanged by it."""
     cmd = [
         "uv",
         "run",
@@ -656,7 +722,7 @@ def _run_agent_subprocess(
         cmd,
         cwd=str(archipelago_agents_dir()),
         check=False,
-        env=_uv_subprocess_env(),
+        env={**_uv_subprocess_env(), **(extra_env or {})},
     )
     return r.returncode
 
@@ -673,8 +739,14 @@ def _run_grading_subprocess(
     eval_configs_path: Path,
     scoring_config_path: Path,
     grades_out: Path,
+    extra_env: dict[str, str] | None = None,
 ) -> int:
-    """Invoke the vendored grading runner via uv (matches the upstream example)."""
+    """Invoke the vendored grading runner via uv (matches the upstream example).
+
+    ``extra_env`` is merged into the child process environment only (the Azure
+    ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` overrides when ``--azure`` is on),
+    so the judge call reaches Azure. The grading runner makes no embedding calls,
+    so this override is total and safe; nothing secret is written to disk."""
     cmd = [
         "uv",
         "run",
@@ -707,7 +779,7 @@ def _run_grading_subprocess(
         cmd,
         cwd=str(archipelago_grading_dir()),
         check=False,
-        env=_uv_subprocess_env(),
+        env={**_uv_subprocess_env(), **(extra_env or {})},
     )
     return r.returncode
 
@@ -833,9 +905,7 @@ def run_single_task(
             retrieved: list[Any] = []
             try:
                 dc_rs_q_emb = dc_rs_runtime.embed.embed([task.prompt])[0]
-                retrieved = retrieve(
-                    bank, query_embedding=dc_rs_q_emb, k=dc_rs_runtime.cfg.top_k
-                )
+                retrieved = retrieve(bank, query_embedding=dc_rs_q_emb, k=dc_rs_runtime.cfg.top_k)
             except Exception as exc:
                 log.warning(
                     "dc-rs: retrieval failed for task=%s domain=%s (%s); proceeding without retrieval",
@@ -846,9 +916,7 @@ def run_single_task(
                 retrieved = []
                 dc_rs_q_emb = []
             dc_rs_csv["dc_rs_retrieved_count"] = len(retrieved)
-            dc_rs_csv["dc_rs_retrieved_bank_ids"] = json.dumps(
-                [r.entry.bank_id for r in retrieved]
-            )
+            dc_rs_csv["dc_rs_retrieved_bank_ids"] = json.dumps([r.entry.bank_id for r in retrieved])
             retrieved_block = format_retrieved_cases(retrieved)
             try:
                 syn = synthesize(
@@ -857,9 +925,7 @@ def run_single_task(
                     task_prompt=task.prompt,
                     cfg=dc_rs_runtime.cfg,
                 )
-                new_cheatsheet, wipe_rescued = apply_wipe_guard(
-                    prev_cheatsheet, syn.cheatsheet
-                )
+                new_cheatsheet, wipe_rescued = apply_wipe_guard(prev_cheatsheet, syn.cheatsheet)
                 dc_rs_runtime.write_cheatsheet(task.domain, new_cheatsheet)
                 dc_rs_runtime.archive_cheatsheet(task.domain, task.task_id, new_cheatsheet)
                 dc_rs_runtime.append_synth_log(
@@ -913,7 +979,9 @@ def run_single_task(
             except Exception as exc:
                 log.warning(
                     "trace: retrieval failed for task=%s domain=%s (%s); proceeding without retrieval",
-                    task.task_id, task.domain, exc,
+                    task.task_id,
+                    task.domain,
+                    exc,
                 )
                 retrieved_bullets = []
             trace_csv["retrieved_bullet_count"] = len(retrieved_bullets)
@@ -947,8 +1015,10 @@ def run_single_task(
         )
 
         # --- Run the agent --------------------------------------------------
-        # When Azure is on and the profile is gpt-5.5*, route the
-        # subprocess's orchestrator model to azure/<deployment>.
+        # When Azure is on and the profile is gpt-5.5*, the orchestrator model
+        # string is unchanged (openai/<deployment>); only the destination is
+        # redirected to Azure via subprocess-only env overrides (OPENAI_BASE_URL
+        # + OPENAI_API_KEY). The key is never written to disk.
         azure_eff = azure_cfg or AzureConfig()
         routed_orchestrator = route_model_id(profile.orchestrator_model, cfg=azure_eff)
         trajectory_path = output_dir / "trajectory.json"
@@ -960,6 +1030,7 @@ def run_single_task(
             orchestrator_model=routed_orchestrator,
             orchestrator_extra_args_path=extra_args_path,
             trajectory_out=trajectory_path,
+            extra_env=azure_subprocess_env(azure_eff),
         )
         if rc != 0:
             log.warning("agent subprocess exited with code %d", rc)
@@ -1018,9 +1089,11 @@ def run_single_task(
             raise RuntimeError(f"agent subprocess exited with code {rc}")
 
         # --- Grading config files ------------------------------------------
-        # Route the judge model id when Azure is on (gpt-5.5 →
-        # azure/<deployment>). Vendor grader reads
-        # grading_settings.json verbatim.
+        # Route the judge model id when Azure is on. With openai/-provider
+        # routing the model string is unchanged (openai/<deployment>); the
+        # judge call is redirected to Azure via subprocess-only env overrides
+        # below. grading_settings.json therefore carries no key and no
+        # azure/ string -- only the (unchanged) model id and judge extra args.
         judge_for_grading = dataclasses.replace(
             settings.judge,
             model_id=route_model_id(settings.judge.model_id, cfg=azure_eff),
@@ -1052,6 +1125,7 @@ def run_single_task(
                 eval_configs_path=eval_configs_path,
                 scoring_config_path=scoring_config_path,
                 grades_out=grades_path,
+                extra_env=azure_subprocess_env(azure_eff),
             )
             if rc != 0:
                 raise RuntimeError(f"grading subprocess exited with code {rc}")
@@ -1157,8 +1231,14 @@ def run_single_task(
         if trace_runtime is not None:
             from apex_agents_bench.trace import (
                 apply_ops as trace_apply_ops,
+            )
+            from apex_agents_bench.trace import (
                 curate as trace_curate,
+            )
+            from apex_agents_bench.trace import (
                 reflect as trace_reflect,
+            )
+            from apex_agents_bench.trace import (
                 render_trajectory_for_curator as trace_render_traj,
             )
 
@@ -1253,7 +1333,9 @@ def run_single_task(
             except Exception as exc:
                 log.warning(
                     "trace: reflector/curator failed for task=%s domain=%s (%s); leaving ledger unchanged",
-                    task.task_id, task.domain, exc,
+                    task.task_id,
+                    task.domain,
+                    exc,
                 )
             active = tstore.active_bullets()
             trace_csv["trace_active_bullet_count_after"] = len(active)
@@ -1334,6 +1416,7 @@ def calculate_stats(output_csv: Path) -> dict:
 
 def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
     """Run the runner. Returns the end-of-run summary dict."""
+    _load_dotenv_for_run()
     validate(opts.settings.dataset_dir)
     hf_token = hf_token or os.environ.get("HF_TOKEN")
 
@@ -1374,6 +1457,17 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
         cfg_in = dataclasses.replace(
             cfg_in, synthesizer_model=route_model_id(cfg_in.synthesizer_model, cfg=opts.azure)
         )
+        # When Azure is on, redirect this in-process synthesizer call to Azure
+        # by adding api_base + api_key to the call kwargs. This is additive: no
+        # sampling parameter changes, and the key is not persisted (the manifest
+        # serializes only enabled/top_k/embedding_model, never extra_args).
+        # Embeddings stay on the real OPENAI_API_KEY in this process's env.
+        _az_kw = azure_call_kwargs(opts.azure)
+        if _az_kw:
+            cfg_in = dataclasses.replace(
+                cfg_in,
+                synthesizer_extra_args={**(cfg_in.synthesizer_extra_args or {}), **_az_kw},
+            )
 
         dc_rs_runtime = DCRSRuntime.create(
             cfg=cfg_in,
@@ -1391,8 +1485,7 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
     if opts.trace.enabled:
         if opts.dc_rs.enabled:
             raise ValueError(
-                "--trace and --dc-rs are mutually exclusive. "
-                "Pick one memory subsystem per run."
+                "--trace and --dc-rs are mutually exclusive. Pick one memory subsystem per run."
             )
         from apex_agents_bench.trace.runtime import TraceRuntime
 
@@ -1405,9 +1498,7 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
                     for r in rdr:
                         d = r.get("domain", "")
                         if r.get("status") == "completed" and d:
-                            completed_per_domain_trace[d] = (
-                                completed_per_domain_trace.get(d, 0) + 1
-                            )
+                            completed_per_domain_trace[d] = completed_per_domain_trace.get(d, 0) + 1
             except Exception:
                 completed_per_domain_trace = {}
 
@@ -1425,6 +1516,15 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             reflector_model=route_model_id(cfg_trace_in.reflector_model, cfg=opts.azure),
             curator_model=route_model_id(cfg_trace_in.curator_model, cfg=opts.azure),
         )
+        # When Azure is on, redirect the in-process reflector + curator calls to
+        # Azure via api_base + api_key (additive; no sampling change; not
+        # persisted). Embeddings stay on the real OPENAI_API_KEY in this env.
+        _az_kw_trace = azure_call_kwargs(opts.azure)
+        if _az_kw_trace:
+            cfg_trace_in = dataclasses.replace(
+                cfg_trace_in,
+                model_extra_args={**(cfg_trace_in.model_extra_args or {}), **_az_kw_trace},
+            )
 
         trace_runtime = TraceRuntime.create(
             cfg=cfg_trace_in,

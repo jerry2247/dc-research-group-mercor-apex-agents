@@ -197,14 +197,12 @@ def reflect(
     prompt_tokens = int(
         getattr(usage_obj, "prompt_tokens", None)
         if getattr(usage_obj, "prompt_tokens", None) is not None
-        else (usage_obj.get("prompt_tokens") if isinstance(usage_obj, dict) else 0)
-        or 0
+        else (usage_obj.get("prompt_tokens") if isinstance(usage_obj, dict) else 0) or 0
     )
     completion_tokens = int(
         getattr(usage_obj, "completion_tokens", None)
         if getattr(usage_obj, "completion_tokens", None) is not None
-        else (usage_obj.get("completion_tokens") if isinstance(usage_obj, dict) else 0)
-        or 0
+        else (usage_obj.get("completion_tokens") if isinstance(usage_obj, dict) else 0) or 0
     )
     proposals, err = parse_reflector_proposals(content)
     return ReflectorResult(

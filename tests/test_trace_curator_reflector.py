@@ -58,8 +58,12 @@ def test_apply_create_commits() -> None:
     ops = [CuratedOp(op="CREATE", section="S", content="C", source_problem="P")]
     cfg = TraceConfig(enabled=True)
     stats = apply_ops(
-        store=store, ops=ops, retrieved=[], embed=_Embed(),
-        cfg=cfg, current_ordinal=1,
+        store=store,
+        ops=ops,
+        retrieved=[],
+        embed=_Embed(),
+        cfg=cfg,
+        current_ordinal=1,
     )
     assert stats.create_committed == 1
     assert len(store.bullets) == 1
@@ -92,13 +96,19 @@ def test_apply_create_dedups_against_active_store_not_only_retrieved() -> None:
 def test_apply_consolidate_sums_counters() -> None:
     store = TraceLedger(domain="Law")
     b1 = store.add(
-        section="S1", content="o1", source_problem="p1",
-        content_embedding=[1.0, 0.0], source_problem_embedding=[0.0, 1.0],
+        section="S1",
+        content="o1",
+        source_problem="p1",
+        content_embedding=[1.0, 0.0],
+        source_problem_embedding=[0.0, 1.0],
         created=1,
     )
     b2 = store.add(
-        section="S2", content="o2", source_problem="p2",
-        content_embedding=[0.0, 1.0], source_problem_embedding=[1.0, 0.0],
+        section="S2",
+        content="o2",
+        source_problem="p2",
+        content_embedding=[0.0, 1.0],
+        source_problem_embedding=[1.0, 0.0],
         created=2,
     )
     # Pre-populate counters
@@ -115,8 +125,12 @@ def test_apply_consolidate_sums_counters() -> None:
         )
     ]
     stats = apply_ops(
-        store=store, ops=ops, retrieved=[], embed=_Embed(),
-        cfg=TraceConfig(enabled=True), current_ordinal=3,
+        store=store,
+        ops=ops,
+        retrieved=[],
+        embed=_Embed(),
+        cfg=TraceConfig(enabled=True),
+        current_ordinal=3,
     )
     assert stats.consolidate == 1
     new_id = "bullet-3"
@@ -132,7 +146,11 @@ def test_apply_invalid_id_counted() -> None:
     store = TraceLedger(domain="Law")
     ops = [CuratedOp(op="DELETE", bullet_id="bullet-999")]
     stats = apply_ops(
-        store=store, ops=ops, retrieved=[], embed=_Embed(),
-        cfg=TraceConfig(enabled=True), current_ordinal=1,
+        store=store,
+        ops=ops,
+        retrieved=[],
+        embed=_Embed(),
+        cfg=TraceConfig(enabled=True),
+        current_ordinal=1,
     )
     assert stats.skipped_invalid_bullet_id == 1

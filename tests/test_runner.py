@@ -10,6 +10,7 @@ import csv
 from pathlib import Path
 
 from apex_agents_bench.agent_profile import get_profile
+from apex_agents_bench.azure_routing import AzureConfig
 from apex_agents_bench.config import Settings
 from apex_agents_bench.dataset import Criterion, Task
 from apex_agents_bench.runner import (
@@ -305,6 +306,37 @@ def test_build_run_manifest_contains_nonsecret_run_state(tmp_path: Path) -> None
     assert "OPENAI_API_KEY" not in str(manifest)
 
 
+def test_build_run_manifest_records_nonsecret_azure_state(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_API_KEY", "azure-secret")
+    monkeypatch.setenv("AZURE_API_BASE", "https://unit-test.services.ai.azure.com/openai/v1")
+    monkeypatch.setenv("AZURE_API_VERSION", "2025-07-01-preview")
+
+    tasks = [_t("a", "banking", "w1")]
+    opts = _opts(
+        output_csv=tmp_path / "r.csv",
+        output_dir=tmp_path,
+        azure=AzureConfig(enabled=True, deployment_name="gpt-5.5-test"),
+    )
+    manifest = build_run_manifest(opts, tasks, tasks, status="starting")
+
+    assert manifest["azure"] == {
+        "enabled": True,
+        "route": "openai-compatible-/openai/v1",
+        "deployment_name": "gpt-5.5-test",
+        "api_base_present": True,
+        "api_base_scheme": "https",
+        "api_base_host": "unit-test.services.ai.azure.com",
+        "api_base_path": "/openai/v1",
+        "api_key_present": True,
+        "api_version_present": True,
+        "api_version_used_by_route": False,
+        "effective_agent_model": "openai/gpt-5.5-test",
+        "effective_judge_model": "openai/gpt-5.5-test",
+        "embeddings_provider": "openai",
+    }
+    assert "azure-secret" not in str(manifest)
+
+
 def test_preflight_credentials_fails_before_docker_when_keys_missing(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -339,6 +371,28 @@ def test_preflight_requires_deepseek_key_for_deepseek_profile(tmp_path: Path, mo
     opts = _opts(settings=settings, profile=get_profile("deepseek-v4-pro-max"))
 
     with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+        _preflight_credentials(opts, [_t("a", "banking", "w1")], hf_token=None)
+
+
+def test_preflight_azure_requires_key_and_base_not_api_version(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+
+    monkeypatch.setenv("AZURE_API_KEY", "azure-secret")
+    monkeypatch.setenv("AZURE_API_BASE", "https://unit-test.services.ai.azure.com/openai/v1")
+    monkeypatch.delenv("AZURE_API_VERSION", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+
+    settings = Settings.defaults().with_dataset_dir(tmp_path)
+    world_dir = tmp_path / "world_files_zipped"
+    world_dir.mkdir(parents=True)
+    (world_dir / "w1.zip").write_bytes(b"not-a-real-zip-but-preflight-only")
+    opts = _opts(settings=settings, azure=AzureConfig(enabled=True))
+
+    _preflight_credentials(opts, [_t("a", "banking", "w1")], hf_token=None)
+
+    monkeypatch.delenv("AZURE_API_BASE", raising=False)
+    with pytest.raises(RuntimeError, match="AZURE_API_BASE"):
         _preflight_credentials(opts, [_t("a", "banking", "w1")], hf_token=None)
 
 
