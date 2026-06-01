@@ -64,6 +64,7 @@ from apex_agents_bench.config import (
 )
 from apex_agents_bench.dataset import Task, load_tasks, validate
 from apex_agents_bench.dc_rs.config import DCRSConfig
+from apex_agents_bench.dl.config import DLConfig
 from apex_agents_bench.docker_env import EnvContainer, start_env, stop_env
 from apex_agents_bench.judge import (
     write_eval_configs,
@@ -167,17 +168,25 @@ class RunOptions:
     per-domain pool afterward. See ``docs/DC_RS_PRD.md``."""
 
     trace: TraceConfig = field(default_factory=TraceConfig)
-    """TRACE (uses-GT) configuration. Mutually exclusive with DC-RS —
-    at most one of ``dc_rs.enabled`` and ``trace.enabled`` may be True.
-    When ``trace.enabled=True`` the runner threads the boolean
-    ``criteria_passed == criteria_total`` into the reflector and
-    curator. See ``docs/TRACE_PRD.md``."""
+    """TRACE (uses-GT) configuration. Mutually exclusive with DC-RS and
+    DL — at most one of ``dc_rs.enabled``, ``trace.enabled`` and
+    ``dl.enabled`` may be True. When ``trace.enabled=True`` the runner
+    threads the boolean ``criteria_passed == criteria_total`` into the
+    reflector and curator. See ``docs/TRACE_PRD.md``."""
+
+    dl: DLConfig = field(default_factory=DLConfig)
+    """DL (Dynamic Ledger, no-GT) configuration. Mutually exclusive with
+    DC-RS and TRACE. When ``enabled=True`` the runner does dual-axis
+    retrieval into a per-domain ledger of itemised typed entries and
+    injects them before the agent; AFTER the agent a single curator LLM
+    call emits a CREATE/UPDATE/DELETE batch. No ground-truth signal is
+    threaded into the curator. See ``docs/DL_PRD.md``."""
 
     azure: AzureConfig = field(default_factory=AzureConfig)
     """Azure-OpenAI routing for GPT-5.5 chat completions. When
     ``enabled=True`` any ``gpt-5.5*`` model id (judge, agent profile,
-    DC-RS synthesizer, TRACE reflector/curator) is rewritten to
-    ``azure/<deployment_name>`` before reaching LiteLLM. The embedding
+    DC-RS synthesizer, TRACE reflector/curator, DL curator) is rewritten
+    to ``azure/<deployment_name>`` before reaching LiteLLM. The embedding
     model (``text-embedding-3-large``) is always served by OpenAI
     regardless of this setting. See ``apex_agents_bench/azure_routing.py``."""
 
@@ -303,6 +312,37 @@ def csv_headers_with_trace() -> list[str]:
     header order is preserved as a prefix.
     """
     return list(CSV_HEADERS) + list(_TRACE_CSV_COLUMNS)
+
+
+_DL_CSV_COLUMNS: tuple[str, ...] = (
+    "dl_enabled",
+    "dl_snapshot_index_before",
+    "dl_retrieved_count",
+    "dl_retrieved_entry_ids",
+    "dl_curator_create_count",
+    "dl_curator_update_count",
+    "dl_curator_delete_count",
+    "dl_curator_skipped_invalid_id_count",
+    "dl_curator_parse_error",
+    "dl_active_entry_count_after",
+    "dl_total_entry_count_after",
+    "dl_total_active_chars_after",
+    "dl_curator_prompt_tokens",
+    "dl_curator_completion_tokens",
+    "dl_curator_wall_seconds",
+    "dl_trajectory_chars_seen_by_curator",
+)
+
+
+def csv_headers_with_dl() -> list[str]:
+    """Return the CSV header list with the DL columns appended.
+
+    Mutually exclusive with the DC-RS and TRACE columns: at most one of
+    ``--dc-rs``, ``--trace`` and ``--dl`` may be on per run. Baseline
+    header order is preserved as a prefix — verified by
+    ``test_dl_on_csv_extends_baseline_at_end``.
+    """
+    return list(CSV_HEADERS) + list(_DL_CSV_COLUMNS)
 
 
 # -----------------------------------------------------------------------------
@@ -464,9 +504,9 @@ def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str
     missing: list[str] = []
     if opts.azure.enabled:
         # All gpt-5.5 calls (agent if it is gpt-5.5, judge, and the in-process
-        # DC-RS synthesizer / TRACE reflector+curator) route to the Azure
-        # deployment via the openai/ provider with AZURE creds. Require both the
-        # key and the OpenAI-compatible base.
+        # DC-RS synthesizer / TRACE reflector+curator / DL curator) route to the
+        # Azure deployment via the openai/ provider with AZURE creds. Require
+        # both the key and the OpenAI-compatible base.
         for key in ("AZURE_API_KEY", "AZURE_API_BASE"):
             if not os.environ.get(key) and key not in missing:
                 missing.append(key)
@@ -476,9 +516,9 @@ def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str
             agent_key = _required_api_key(opts.profile.orchestrator_model, opts.profile.provider)
             if agent_key and not os.environ.get(agent_key) and agent_key not in missing:
                 missing.append(agent_key)
-        # Embeddings (DC-RS / TRACE) always use the real OpenAI key, never Azure.
+        # Embeddings (DC-RS / TRACE / DL) always use the real OpenAI key, never Azure.
         if (
-            (opts.dc_rs.enabled or opts.trace.enabled)
+            (opts.dc_rs.enabled or opts.trace.enabled or opts.dl.enabled)
             and not os.environ.get("OPENAI_API_KEY")
             and "OPENAI_API_KEY" not in missing
         ):
@@ -491,7 +531,7 @@ def _preflight_credentials(opts: RunOptions, selected: list[Task], hf_token: str
                 missing.append(key)
         # Embeddings always go through OpenAI.
         if (
-            (opts.dc_rs.enabled or opts.trace.enabled)
+            (opts.dc_rs.enabled or opts.trace.enabled or opts.dl.enabled)
             and not os.environ.get("OPENAI_API_KEY")
             and "OPENAI_API_KEY" not in missing
         ):
@@ -815,6 +855,7 @@ def run_single_task(
     hf_token: str | None = None,
     dc_rs_runtime: Any | None = None,  # DCRSRuntime | None
     trace_runtime: Any | None = None,  # TraceRuntime | None
+    dl_runtime: Any | None = None,  # DLRuntime | None
     azure_cfg: AzureConfig | None = None,
 ) -> tuple[TaskOutcome, dict | None]:
     """Run ONE task end-to-end. Returns ``(outcome, dc_rs_csv_fragment)``.
@@ -992,6 +1033,50 @@ def run_single_task(
                 except Exception as exc:
                     log.warning(
                         "trace: injecting cheatsheet into initial_messages failed (%s); leaving file unchanged",
+                        exc,
+                    )
+
+        # --- DL Hook A: dual-retrieve + inject typed entries ---------------
+        # Faithful DL: NO LLM call here. Embed the task prompt, do dual-axis
+        # retrieval (entry-content axis + source-problem axis, unioned) into
+        # the per-domain ledger, render the retrieved typed entries grouped
+        # under their five category headers, and prepend the block to the
+        # USER message of initial_messages.json. The single LLM call (the
+        # curator) runs AFTER the agent in Hook B. No ground-truth signal is
+        # consumed anywhere.
+        dl_csv: dict[str, Any] = {}
+        dl_q_emb: list[float] = []
+        dl_retrieved: list[Any] = []
+        if dl_runtime is not None:
+            from apex_agents_bench.dl import augment_initial_messages as dl_inject
+            from apex_agents_bench.dl import retrieve as dl_retrieve
+            from apex_agents_bench.dl.runtime import dl_csv_fragment_empty
+
+            dl_csv = dl_csv_fragment_empty()
+            dledger = dl_runtime.ledger_for(task.domain)
+            dl_csv["dl_snapshot_index_before"] = dl_runtime.next_ordinal.get(task.domain, 0)
+            try:
+                dl_q_emb = dl_runtime.embed.embed([task.prompt])[0]
+                dl_retrieved = dl_retrieve(
+                    dledger, query_embedding=dl_q_emb, k=dl_runtime.cfg.top_k
+                )
+            except Exception as exc:
+                log.warning(
+                    "dl: retrieval failed for task=%s domain=%s (%s); proceeding without retrieval",
+                    task.task_id,
+                    task.domain,
+                    exc,
+                )
+                dl_retrieved = []
+                dl_q_emb = []
+            dl_csv["dl_retrieved_count"] = len(dl_retrieved)
+            dl_csv["dl_retrieved_entry_ids"] = json.dumps([e.entry_id for e in dl_retrieved])
+            if dl_retrieved:
+                try:
+                    dl_inject(initial_messages_path, entries=dl_retrieved)
+                except Exception as exc:
+                    log.warning(
+                        "dl: injecting entries into initial_messages failed (%s); leaving file unchanged",
                         exc,
                     )
 
@@ -1342,10 +1427,88 @@ def run_single_task(
             trace_csv["trace_total_bullet_count_after"] = len(tstore.bullets)
             trace_csv["trace_total_active_chars_after"] = sum(len(b.content) for b in active)
 
+        # --- DL Hook B: curate (one LLM call, AFTER the agent, no GT) ------
+        # Faithful DL: the SINGLE LLM call (the curator) runs HERE, after the
+        # agent, mirroring the original Dynamic Ledger's observe(). It reads
+        # the retrieved entries (the editable window), the current task, and
+        # THIS task's trajectory, and emits a CREATE/UPDATE/DELETE batch
+        # applied deterministically to the per-domain ledger. No ground-truth
+        # signal (criteria, scores, expected answer, judge rationale) is
+        # consumed. The agent's status is NOT a gating signal: the curator
+        # learns from whatever trajectory the agent produced.
+        if dl_runtime is not None:
+            from apex_agents_bench.dl import apply_ops as dl_apply_ops
+            from apex_agents_bench.dl import curate as dl_curate
+            from apex_agents_bench.dl import render_trajectory_for_curator as dl_render_traj
+
+            dledger = dl_runtime.ledger_for(task.domain)
+            ordinal = dl_runtime.current_ordinal_for(task.domain)
+            try:
+                traj_json = json.loads(trajectory_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                log.warning("dl: re-reading trajectory.json failed (%s)", exc)
+                traj_json = {}
+            rendered = dl_render_traj(
+                traj_json,
+                max_chars_per_tool_result=dl_runtime.cfg.trajectory_max_chars_per_tool_result,
+            )
+            dl_csv["dl_trajectory_chars_seen_by_curator"] = len(rendered)
+            try:
+                dl_cur = dl_curate(
+                    dledger,
+                    dl_retrieved,
+                    task.prompt,
+                    rendered,
+                    cfg=dl_runtime.cfg,
+                )
+                dl_stats = dl_apply_ops(
+                    ledger=dledger,
+                    ops=dl_cur.ops,
+                    embed=dl_runtime.embed,
+                    current_ordinal=ordinal,
+                )
+                dl_runtime.persist(task.domain)
+                dl_runtime.snapshot_stores[task.domain].append_curator_log(
+                    {
+                        "task_id": task.task_id,
+                        "ordinal": ordinal,
+                        "retrieved_entry_ids": [e.entry_id for e in dl_retrieved],
+                        "create": dl_stats.create,
+                        "update": dl_stats.update,
+                        "delete": dl_stats.delete,
+                        "skipped_invalid_entry_id": dl_stats.skipped_invalid_entry_id,
+                        "curator_parse_error": dl_cur.parse_error,
+                        "curator_prompt_tokens": dl_cur.prompt_tokens,
+                        "curator_completion_tokens": dl_cur.completion_tokens,
+                        "curator_wall_seconds": dl_cur.wall_seconds,
+                    }
+                )
+                dl_csv["dl_curator_create_count"] = dl_stats.create
+                dl_csv["dl_curator_update_count"] = dl_stats.update
+                dl_csv["dl_curator_delete_count"] = dl_stats.delete
+                dl_csv["dl_curator_skipped_invalid_id_count"] = dl_stats.skipped_invalid_entry_id
+                dl_csv["dl_curator_parse_error"] = dl_cur.parse_error or ""
+                dl_csv["dl_curator_prompt_tokens"] = dl_cur.prompt_tokens
+                dl_csv["dl_curator_completion_tokens"] = dl_cur.completion_tokens
+                dl_csv["dl_curator_wall_seconds"] = dl_cur.wall_seconds
+            except Exception as exc:
+                log.warning(
+                    "dl: curator failed for task=%s domain=%s (%s); leaving ledger unchanged",
+                    task.task_id,
+                    task.domain,
+                    exc,
+                )
+            active_e = dledger.active_entries()
+            dl_csv["dl_active_entry_count_after"] = len(active_e)
+            dl_csv["dl_total_entry_count_after"] = len(dledger.entries)
+            dl_csv["dl_total_active_chars_after"] = sum(len(e.content) for e in active_e)
+
         if dc_rs_runtime is not None:
             return outcome, dc_rs_csv
         if trace_runtime is not None:
             return outcome, trace_csv
+        if dl_runtime is not None:
+            return outcome, dl_csv
         return outcome, None
 
     finally:
@@ -1434,6 +1597,13 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
         len(completed),
         len(pending),
     )
+
+    # --- Memory subsystems are mutually exclusive (at most one per run) ------
+    if sum(bool(x) for x in (opts.dc_rs.enabled, opts.trace.enabled, opts.dl.enabled)) > 1:
+        raise ValueError(
+            "--dc-rs, --trace and --dl are mutually exclusive. "
+            "Pick one memory subsystem per run."
+        )
 
     # --- DC-RS: build per-run runtime (when enabled) -------------------------
     dc_rs_runtime: Any | None = None
@@ -1538,6 +1708,49 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             run_dir / "trace",
         )
 
+    # --- DL: build per-run runtime (when enabled) ----------------------------
+    dl_runtime: Any | None = None
+    if opts.dl.enabled:
+        from apex_agents_bench.dl.runtime import DLRuntime
+
+        run_dir = opts.output_csv.parent
+
+        # The curator runs on the SAME model as the agent profile under test,
+        # with the same thinking effort. Only the judge model is fixed (gpt-5.5
+        # medium). Fill the curator model in from the active AgentProfile here
+        # unless the user set it explicitly, then apply Azure routing.
+        cfg_dl_in = opts.dl
+        if cfg_dl_in.curator_model is None:
+            cfg_dl_in = dataclasses.replace(
+                cfg_dl_in,
+                curator_model=opts.profile.orchestrator_model,
+                curator_extra_args=dict(opts.profile.orchestrator_extra_args or {}),
+            )
+        cfg_dl_in = dataclasses.replace(
+            cfg_dl_in, curator_model=route_model_id(cfg_dl_in.curator_model, cfg=opts.azure)
+        )
+        # When Azure is on, redirect this in-process curator call to Azure by
+        # adding api_base + api_key to the call kwargs. This is additive: no
+        # sampling parameter changes, and the key is not persisted. Embeddings
+        # stay on the real OPENAI_API_KEY in this process's env.
+        _az_kw_dl = azure_call_kwargs(opts.azure)
+        if _az_kw_dl:
+            cfg_dl_in = dataclasses.replace(
+                cfg_dl_in,
+                curator_extra_args={**(cfg_dl_in.curator_extra_args or {}), **_az_kw_dl},
+            )
+
+        dl_runtime = DLRuntime.create(
+            cfg=cfg_dl_in,
+            run_dir=run_dir,
+        )
+        log.info(
+            "dl: enabled (embedding=%s top_k=%d ledger_root=%s)",
+            opts.dl.embedding_model,
+            opts.dl.top_k,
+            run_dir / "dl",
+        )
+
     write_manifest(
         opts.output_csv,
         build_run_manifest(opts, selected, pending, status="starting"),
@@ -1585,6 +1798,7 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
                 hf_token=hf_token,
                 dc_rs_runtime=dc_rs_runtime,
                 trace_runtime=trace_runtime,
+                dl_runtime=dl_runtime,
                 azure_cfg=opts.azure,
             )
         except KeyboardInterrupt:
@@ -1665,6 +1879,8 @@ def run(opts: RunOptions, *, hf_token: str | None = None) -> dict:
             headers = csv_headers_with_dc_rs()
         elif opts.trace.enabled:
             headers = csv_headers_with_trace()
+        elif opts.dl.enabled:
+            headers = csv_headers_with_dl()
         else:
             headers = None
         append_row(opts.output_csv, row, headers=headers)

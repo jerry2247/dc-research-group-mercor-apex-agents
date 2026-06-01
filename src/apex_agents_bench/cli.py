@@ -589,6 +589,30 @@ def run(
         min=0,
         help="Top-k per retrieval axis when TRACE is on.",
     ),
+    dl: bool = typer.Option(
+        False,
+        "--dl/--no-dl",
+        help="Enable the DL (Dynamic Ledger, no-ground-truth) subsystem. "
+        "Default: off. Mutually exclusive with --dc-rs and --trace. "
+        "DL keeps a per-domain ledger of individual TYPED entries (each "
+        "classified into one of the five DC-RS categories) indexed for "
+        "DUAL retrieval (entry content AND the source problem that "
+        "produced it). BEFORE each task a dual-axis top-k retrieval "
+        "injects the matching entries into the agent's user message. "
+        "AFTER the agent runs, a single curator LLM call reads the "
+        "retrieved entries, the task, and this task's trajectory, and "
+        "emits a CREATE/UPDATE/DELETE batch applied to the ledger. The "
+        "curator runs on the same model as the agent profile (only the "
+        "judge is fixed at gpt-5.5). No ground-truth signal is consumed. "
+        "See docs/DL_PRD.md.",
+    ),
+    dl_top_k: int = typer.Option(
+        3,
+        "--dl-top-k",
+        min=0,
+        help="Top-k per retrieval axis (content + source-problem) the DL "
+        "curator and injector see per task when DL is on. Default 3.",
+    ),
     azure: bool = typer.Option(
         False,
         "--azure/--no-azure",
@@ -612,12 +636,15 @@ def run(
     from apex_agents_bench.agent_profile import get_profile
     from apex_agents_bench.azure_routing import AzureConfig
     from apex_agents_bench.dc_rs.config import DCRSConfig
+    from apex_agents_bench.dl.config import DLConfig
     from apex_agents_bench.runner import RunOptions
     from apex_agents_bench.runner import run as run_runner
     from apex_agents_bench.trace.config import TraceConfig
 
-    if dc_rs and trace:
-        console.print("[red]error:[/red] --dc-rs and --trace are mutually exclusive; pick one.")
+    if sum(bool(x) for x in (dc_rs, trace, dl)) > 1:
+        console.print(
+            "[red]error:[/red] --dc-rs, --trace and --dl are mutually exclusive; pick one."
+        )
         raise typer.Exit(code=2)
 
     _validate_domain(domain)
@@ -665,6 +692,10 @@ def run(
         trace=TraceConfig(
             enabled=trace,
             top_k_per_axis=trace_top_k,
+        ),
+        dl=DLConfig(
+            enabled=dl,
+            top_k=dl_top_k,
         ),
         azure=AzureConfig(enabled=azure),
     )
