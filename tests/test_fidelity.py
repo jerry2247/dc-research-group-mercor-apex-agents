@@ -317,8 +317,16 @@ def test_vendor_gpt55_responses_bridge_patch_present() -> None:
     assert "_is_reasoning_bridge_model" in agents_llm
     assert "await aresponses(" in agents_llm
     assert "_responses_output_to_model_response" in agents_llm
-    # The branch is gated on the gpt-5.5 family AND tools.
+    # Multi-turn correctness: the chat history must be translated into Responses
+    # API input items (assistant tool_calls -> function_call,
+    # role=tool -> function_call_output); passing raw chat dicts breaks turn 2+.
+    assert "_chat_messages_to_responses_input" in agents_llm
+    assert '"type": "function_call"' in agents_llm
+    assert '"type": "function_call_output"' in agents_llm
+    # The branch is gated on the gpt-5.5 family AND tools, and feeds the
+    # TRANSLATED input (not the raw chat messages) to the Responses API.
     assert re.search(r"if\s+_is_reasoning_bridge_model\(model\)\s+and\s+tools\s*:", agents_llm)
+    assert re.search(r'"input"\s*:\s*_chat_messages_to_responses_input\(messages\)', agents_llm)
     # The unmodified chat path still exists for every other model.
     assert "acompletion(**kwargs)" in agents_llm
 

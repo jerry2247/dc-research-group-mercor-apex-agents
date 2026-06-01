@@ -35,10 +35,21 @@ and chat-shaped `usage`). Every other model (grok-4.3, deepseek, gpt-4o,
 ...) is gated out and takes the unmodified chat-completions path
 byte-for-byte.
 
-**Shape** (one inserted block of helpers near the top of the module, and
-one gated branch inside `generate_response` immediately before the existing
-`if stream:` block; **no existing line is modified or removed** — the diff
-is 118 insertions, 0 deletions):
+**Multi-turn correctness**: after each bridged turn the agent appends an
+assistant message carrying `tool_calls` (null content) plus `role="tool"`
+result messages. Feeding those raw chat dicts to `aresponses(input=...)` is
+rejected by the API ("Missing required parameter: 'input[N].content'"). The
+patch therefore translates the chat history into Responses API input items
+via `_chat_messages_to_responses_input`: assistant `tool_calls` ->
+`function_call` items, `role="tool"` -> `function_call_output` items (linked
+by `call_id`), system/user/text -> role/content items. Verified with a live
+3-turn loop (toolbelt_list_tools -> todo_write -> final_answer), no error.
+
+**Shape** (helper functions near the top of the module — model gate, tool
+schema conversion, chat-history -> responses-input translation, responses
+output -> chat ModelResponse — and one gated branch inside
+`generate_response` immediately before the existing `if stream:` block;
+**no existing line is modified or removed**):
 
 ```python
 # near module top

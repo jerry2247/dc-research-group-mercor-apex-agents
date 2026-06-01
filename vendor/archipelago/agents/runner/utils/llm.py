@@ -1,5 +1,6 @@
 """LLM utilities for agents using LiteLLM."""
 
+import json
 from typing import Any
 
 import litellm
@@ -64,6 +65,68 @@ def _chat_tools_to_responses_tools(
             }
         )
     return out
+
+
+def _mget(m: Any, key: str, default: Any = None) -> Any:
+    """Field accessor that works for both dict messages and pydantic message
+    objects (the agent history mixes both)."""
+    if isinstance(m, dict):
+        return m.get(key, default)
+    return getattr(m, key, default)
+
+
+def _chat_messages_to_responses_input(
+    messages: list[LitellmAnyMessage],
+) -> list[dict[str, Any]]:
+    """Translate chat-completions message history into Responses API input
+    items.
+
+    This is required for MULTI-TURN correctness: after the first bridged turn
+    the agent appends an assistant message carrying ``tool_calls`` (with null
+    content) and ``role="tool"`` result messages. Passing those raw chat dicts
+    to ``aresponses(input=...)`` is rejected by the API ("Missing required
+    parameter: 'input[N].content'") because the Responses API expects
+    ``function_call`` / ``function_call_output`` items, not chat
+    assistant/tool messages. We do that translation explicitly:
+
+      * assistant message with tool_calls -> one ``function_call`` item per
+        call (plus an assistant text item if it also had content);
+      * ``role="tool"`` result            -> a ``function_call_output`` item
+        linked by ``call_id``;
+      * system / user / plain assistant    -> passed through as a role/content
+        item.
+    """
+    items: list[dict[str, Any]] = []
+    for m in messages:
+        role = _mget(m, "role")
+        content = _mget(m, "content")
+        tool_calls = _mget(m, "tool_calls")
+        if role == "assistant" and tool_calls:
+            if content:
+                items.append({"role": "assistant", "content": content})
+            for tc in tool_calls:
+                fn = _mget(tc, "function")
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": _mget(tc, "id"),
+                        "name": _mget(fn, "name"),
+                        "arguments": _mget(fn, "arguments") or "{}",
+                    }
+                )
+        elif role == "tool":
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": _mget(m, "tool_call_id"),
+                    "output": content
+                    if isinstance(content, str)
+                    else json.dumps(content),
+                }
+            )
+        else:
+            items.append({"role": role, "content": content if content is not None else ""})
+    return items
 
 
 def _responses_output_to_model_response(
@@ -251,7 +314,10 @@ async def generate_response(
     if _is_reasoning_bridge_model(model) and tools:
         resp_kwargs: dict[str, Any] = {
             "model": model,
-            "input": messages,
+            # Multi-turn correctness: translate the chat history (assistant
+            # tool_calls + role=tool results) into Responses API input items;
+            # passing raw chat messages is rejected by the API on turn 2+.
+            "input": _chat_messages_to_responses_input(messages),
             "tools": _chat_tools_to_responses_tools(tools),
             "timeout": llm_response_timeout,
             **extra_args,
