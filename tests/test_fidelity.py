@@ -35,24 +35,29 @@ SRC = REPO / "src" / "apex_agents_bench"
 # -----------------------------------------------------------------------------
 
 
-def test_no_vendored_patch_markers_present() -> None:
-    """Archipelago doesn't require a MODEL_MAPPINGS-style patch, so there
-    should be ZERO `# vendored-patch:` markers under vendor/archipelago/.
-    If a future patch is added, update PATCHES.md AND this test."""
-    count = 0
+def test_vendored_source_patches_are_only_the_documented_ones() -> None:
+    """The ONLY vendored Python-source patch is Patch 002 (gpt-5.5 Responses-API
+    bridge in agents/runner/utils/llm.py). Any other `# PATCH (apex-agents-bench)`
+    marker in vendored .py means an undocumented change snuck in -- update
+    PATCHES.md AND this test if you add another."""
+    marked: list[str] = []
     for path in vendor_dir().rglob("*.py"):
         if path.is_file():
-            count += path.read_text(encoding="utf-8", errors="ignore").count("# vendored-patch:")
-    assert count == 0, (
-        f"expected 0 vendored-patch markers, found {count}. "
-        "If you added a patch, update vendor/archipelago/PATCHES.md and this test."
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if "PATCH (apex-agents-bench)" in text or "# vendored-patch:" in text:
+                marked.append(str(path.relative_to(vendor_dir())))
+    assert marked == ["agents/runner/utils/llm.py"], (
+        f"unexpected vendored-source patch markers: {marked}. "
+        "If you added a patch, record it in vendor/archipelago/PATCHES.md and "
+        "update this test."
     )
 
 
-def test_patches_md_records_zero_active_patches() -> None:
+def test_patches_md_records_the_active_patches() -> None:
     patches_md = (vendor_dir() / "PATCHES.md").read_text(encoding="utf-8")
-    # "zero active patches" must literally appear; this is the load-bearing claim.
-    assert "zero active patches" in patches_md.lower()
+    # Both active patches must be recorded by number.
+    assert "Patch 001" in patches_md  # Dockerfile sandbox_fs.so compile step
+    assert "Patch 002" in patches_md  # gpt-5.5 Responses-API tool-calling bridge
 
 
 def test_upstream_md_records_pinned_commit() -> None:
@@ -296,6 +301,37 @@ def test_archipelago_passes_model_string_verbatim() -> None:
     # Grading call site -- same shape via litellm.acompletion.
     assert re.search(r'"model"\s*:\s*model', grading_llm)
     assert "litellm.acompletion(**kwargs)" in grading_llm
+
+
+def test_vendor_gpt55_responses_bridge_patch_present() -> None:
+    """Patch 002: gpt-5.5 (a reasoning model) drops tool_calls over chat
+    completions, so the vendored agent llm.py must route it through the
+    Responses API. This test pins that the bridge is present, is GATED to the
+    gpt-5.5 family (grok and others keep the chat path), and that the chat
+    path itself is untouched."""
+    agents_llm = (archipelago_agents_dir() / "runner" / "utils" / "llm.py").read_text(
+        encoding="utf-8"
+    )
+    # The patch marker + the gated Responses-API branch are present.
+    assert "PATCH (apex-agents-bench)" in agents_llm
+    assert "_is_reasoning_bridge_model" in agents_llm
+    assert "await aresponses(" in agents_llm
+    assert "_responses_output_to_model_response" in agents_llm
+    # The branch is gated on the gpt-5.5 family AND tools.
+    assert re.search(r"if\s+_is_reasoning_bridge_model\(model\)\s+and\s+tools\s*:", agents_llm)
+    # The unmodified chat path still exists for every other model.
+    assert "acompletion(**kwargs)" in agents_llm
+
+    # Gating: the predicate matches ONLY the gpt-5.5 family, so grok/others
+    # never take the bridge. Asserted on the source so no cross-venv import of
+    # the vendored module (which needs its own deps) is required.
+    body = re.search(r"def _is_reasoning_bridge_model\(.*?\n(.*?)\n\n", agents_llm, re.DOTALL)
+    assert body is not None, "could not locate _is_reasoning_bridge_model body"
+    pred = body.group(1)
+    assert '"gpt-5.5"' in pred and "in m" in pred
+    # Nothing in the predicate widens the gate to grok/deepseek/other families.
+    assert "grok" not in pred.lower()
+    assert "deepseek" not in pred.lower()
 
 
 # -----------------------------------------------------------------------------

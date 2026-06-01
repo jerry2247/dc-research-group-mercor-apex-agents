@@ -28,6 +28,102 @@ if settings.LITELLM_PROXY_API_BASE and settings.LITELLM_PROXY_API_KEY:
     litellm.use_litellm_proxy = True
 
 
+# --- PATCH (apex-agents-bench): GPT-5.5 reasoning-model tool-calling --------
+# OpenAI/Azure gpt-5.5 is a reasoning model. Over the chat-completions API it
+# emits reasoning text but DROPS structured tool_calls when a reasoning effort
+# is set together with the agent's "think before acting" system prompt (proven
+# empirically: chat returns finish_reason=stop with no tool_calls; the
+# Responses API returns the function_call correctly). LiteLLM 1.83.0 contains
+# the bridge rule ("gpt-5.4+ chat calls with tools + reasoning_effort must be
+# bridged to the Responses API") but its completion() call site never forwards
+# tools/reasoning_effort to the bridge check, so the auto-bridge never fires.
+# We bridge explicitly for the gpt-5.5 family ONLY: call the Responses API and
+# translate its output back into a chat-shaped ModelResponse so the agent loop
+# (history threading, tool dispatch, usage tracking) is byte-identical to the
+# chat path. Every other model (grok, etc.) is untouched.
+def _is_reasoning_bridge_model(model: str) -> bool:
+    """True only for the gpt-5.5 family (any provider prefix). All other
+    models take the unmodified chat-completions path."""
+    m = model.lower()
+    return "gpt-5.5" in m or "gpt-5-5" in m
+
+
+def _chat_tools_to_responses_tools(
+    tools: list[ChatCompletionToolParam],
+) -> list[dict[str, Any]]:
+    """Chat tool param -> Responses API flat tool schema."""
+    out: list[dict[str, Any]] = []
+    for t in tools:
+        fn = t.get("function", {})  # type: ignore[union-attr]
+        out.append(
+            {
+                "type": "function",
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "parameters": fn.get("parameters", {}),
+            }
+        )
+    return out
+
+
+def _responses_output_to_model_response(
+    model: str, raw_response: Any
+) -> ModelResponse:
+    """Translate a Responses API result into a chat-shaped ModelResponse with
+    choices[0].message.tool_calls and chat-shaped usage, so all downstream
+    chat-path consumers work unchanged."""
+    rd = (
+        raw_response.model_dump()
+        if hasattr(raw_response, "model_dump")
+        else dict(raw_response)
+    )
+    tool_calls: list[dict[str, Any]] = []
+    content_parts: list[str] = []
+    for item in rd.get("output", []) or []:
+        itype = item.get("type")
+        if itype == "function_call":
+            tool_calls.append(
+                {
+                    "id": item.get("call_id") or item.get("id"),
+                    "type": "function",
+                    "function": {
+                        "name": item.get("name"),
+                        "arguments": item.get("arguments") or "{}",
+                    },
+                }
+            )
+        elif itype == "message":
+            for c in item.get("content", []) or []:
+                if c.get("type") in ("output_text", "text"):
+                    content_parts.append(c.get("text", ""))
+    usage = rd.get("usage", {}) or {}
+    prompt_tokens = usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0) or 0
+    completion_tokens = (
+        usage.get("output_tokens", 0) or usage.get("completion_tokens", 0) or 0
+    )
+    return ModelResponse(
+        choices=[
+            {
+                "index": 0,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": "".join(content_parts) or None,
+                    "tool_calls": tool_calls or None,
+                },
+            }
+        ],
+        usage={
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": usage.get("total_tokens", 0)
+            or (prompt_tokens + completion_tokens),
+        },
+        model=model,
+    )
+# --- END PATCH -------------------------------------------------------------
+
+
 def _is_context_window_error(e: Exception) -> bool:
     """
     Detect context window exceeded errors that LiteLLM doesn't properly classify.
@@ -147,6 +243,28 @@ async def generate_response(
         if trajectory_id:
             tags.append(f"trajectory_id:{trajectory_id}")
         kwargs["extra_body"] = {"tags": tags}
+
+    # PATCH (apex-agents-bench): gpt-5.5 reasoning models drop tool_calls over
+    # chat-completions; route them through the Responses API and translate the
+    # output back to a chat-shaped ModelResponse. Only gpt-5.5 is affected;
+    # every other model falls through to the unchanged chat path below.
+    if _is_reasoning_bridge_model(model) and tools:
+        resp_kwargs: dict[str, Any] = {
+            "model": model,
+            "input": messages,
+            "tools": _chat_tools_to_responses_tools(tools),
+            "timeout": llm_response_timeout,
+            **extra_args,
+        }
+        if settings.LITELLM_PROXY_API_BASE and settings.LITELLM_PROXY_API_KEY:
+            resp_kwargs["api_base"] = settings.LITELLM_PROXY_API_BASE
+            resp_kwargs["api_key"] = settings.LITELLM_PROXY_API_KEY
+            tags = ["service:trajectory"]
+            if trajectory_id:
+                tags.append(f"trajectory_id:{trajectory_id}")
+            resp_kwargs["extra_body"] = {"tags": tags}
+        raw = await aresponses(**resp_kwargs)
+        return _responses_output_to_model_response(model, raw)
 
     if stream:
         kwargs["stream"] = True
